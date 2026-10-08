@@ -1,9 +1,9 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Service.Infrastructure.Data;
+using Itinerario.Infrastructure.Data;
 
-namespace Service.Infrastructure;
+namespace Itinerario.Infrastructure;
 
 public static class DependencyInjection
 {

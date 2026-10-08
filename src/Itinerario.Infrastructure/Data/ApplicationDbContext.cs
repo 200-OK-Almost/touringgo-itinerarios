@@ -1,6 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 
-namespace Service.Infrastructure.Data;
+namespace Itinerario.Infrastructure.Data;
 
 public class ApplicationDbContext : DbContext
 {

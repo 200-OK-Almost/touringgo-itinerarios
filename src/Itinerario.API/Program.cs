@@ -1,6 +1,6 @@
-using Service.API.Extensions;
-using Service.Application;
-using Service.Infrastructure;
+using Itinerario.API.Extensions;
+using Itinerario.Application;
+using Itinerario.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 

@@ -16,8 +16,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Service.Application\Service.Application.csproj" />
-    <ProjectReference Include="..\Service.Infrastructure\Service.Infrastructure.csproj" />
+    <ProjectReference Include="..\Itinerario.Application\Itinerario.Application.csproj" />
+    <ProjectReference Include="..\Itinerario.Infrastructure\Itinerario.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

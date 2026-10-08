@@ -1,6 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 
-namespace Service.Application;
+namespace Itinerario.Application;
 
 public static class DependencyInjection
 {

@@ -11,7 +11,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Service.Domain\Service.Domain.csproj" />
+    <ProjectReference Include="..\Itinerario.Domain\Itinerario.Domain.csproj" />
   </ItemGroup>
 
   <ItemGroup>

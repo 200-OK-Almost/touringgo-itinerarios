@@ -16,8 +16,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Service.Application\Service.Application.csproj" />
-    <ProjectReference Include="..\Service.Domain\Service.Domain.csproj" />
+    <ProjectReference Include="..\Itinerario.Application\Itinerario.Application.csproj" />
+    <ProjectReference Include="..\Itinerario.Domain\Itinerario.Domain.csproj" />
   </ItemGroup>
 
   <ItemGroup>
