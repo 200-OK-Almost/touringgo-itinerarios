@@ -27,4 +27,5 @@ public class Viaje
     public DateTimeOffset FechaActualizacion { get; set; }
 
     public ParametrosFamilia? ParametrosFamilia { get; set; }
+    public ICollection<MiembroViaje> Miembros { get; set; } = new List<MiembroViaje>();
 }
