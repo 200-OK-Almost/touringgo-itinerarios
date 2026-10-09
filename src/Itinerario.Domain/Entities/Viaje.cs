@@ -25,4 +25,6 @@ public class Viaje
     public Guid CreadoPorUsuarioId { get; set; }
     public DateTimeOffset FechaCreacion { get; set; }
     public DateTimeOffset FechaActualizacion { get; set; }
+
+    public ParametrosFamilia? ParametrosFamilia { get; set; }
 }
