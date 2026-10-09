@@ -28,4 +28,5 @@ public class Viaje
 
     public ParametrosFamilia? ParametrosFamilia { get; set; }
     public ICollection<MiembroViaje> Miembros { get; set; } = new List<MiembroViaje>();
+    public ICollection<EtiquetaViaje> Etiquetas { get; set; } = new List<EtiquetaViaje>();
 }
