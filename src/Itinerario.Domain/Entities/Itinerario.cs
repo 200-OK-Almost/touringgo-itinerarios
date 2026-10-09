@@ -16,4 +16,5 @@ public class Itinerario
     public DateTimeOffset FechaActualizacion { get; set; }
 
     public Viaje? Viaje { get; set; }
+    public ICollection<ParadaItinerario> Paradas { get; set; } = new List<ParadaItinerario>();
 }
