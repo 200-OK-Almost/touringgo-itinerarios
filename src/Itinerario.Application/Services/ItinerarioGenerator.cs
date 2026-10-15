@@ -9,6 +9,8 @@ public class ItinerarioGenerator : IItinerarioGenerator
 {
     private const short CuadrasRitmoTranquilo = 4;
     private const short CuadrasRitmoActivo = 8;
+    private const int DescansoMinutos = 15;
+    private const int UltimoMinutoDelDia = (24 * 60) - 1;
 
     private readonly IGeoCalculator _geo;
 
@@ -17,6 +19,7 @@ public class ItinerarioGenerator : IItinerarioGenerator
         _geo = geo;
     }
 
+    // Selección greedy (vecino más cercano): no garantiza el recorrido total óptimo.
     public IReadOnlyCollection<ParadaItinerario> Generar(
         Viaje viaje,
         IReadOnlyCollection<LugarCandidatoDto> lugares)
@@ -41,21 +44,26 @@ public class ItinerarioGenerator : IItinerarioGenerator
 
         var paradas = new List<ParadaItinerario>();
         var ordenPorTurno = new Dictionary<Turno, short>();
-        var horaPorTurno = new Dictionary<Turno, TimeOnly>();
+        var minutoPorTurno = new Dictionary<Turno, int>();
 
         double? latAnterior = (double?)viaje.LatitudPartida;
         double? lonAnterior = (double?)viaje.LongitudPartida;
+        Turno? turnoAnterior = null;
 
         for (var i = 0; i < objetivo; i++)
         {
             var turnoPreferido = turnos[i % turnos.Count];
-            var candidato = ElegirMasCercano(disponibles, turnoPreferido, latAnterior, lonAnterior, limiteCuadras);
 
-            if (candidato is null)
+            var seleccion = latAnterior.HasValue && lonAnterior.HasValue
+                ? ElegirMasCercano(disponibles, turnoPreferido, latAnterior.Value, lonAnterior.Value, limiteCuadras)
+                : ElegirSemilla(disponibles, turnoPreferido);
+
+            if (seleccion is null)
             {
                 break;
             }
 
+            var candidato = seleccion.Lugar;
             disponibles.Remove(candidato);
 
             var orden = ordenPorTurno.TryGetValue(candidato.Turno, out var ordenActual)
@@ -63,27 +71,17 @@ public class ItinerarioGenerator : IItinerarioGenerator
                 : (short)1;
             ordenPorTurno[candidato.Turno] = orden;
 
-            var hora = horaPorTurno.TryGetValue(candidato.Turno, out var horaActual)
-                ? horaActual
-                : HoraBase(candidato.Turno);
-            horaPorTurno[candidato.Turno] = hora.Add(TimeSpan.FromMinutes(candidato.DuracionSugeridaMinutos + 15));
+            var minutoActual = minutoPorTurno.TryGetValue(candidato.Turno, out var acumulado)
+                ? acumulado
+                : HoraBaseMinutos(candidato.Turno);
 
-            int? distanciaMetros = null;
-            short? cuadras = null;
-            short? minutosAPie = null;
-
-            if (latAnterior.HasValue && lonAnterior.HasValue)
+            if (turnoAnterior == candidato.Turno && seleccion.MinutosAPie is not null)
             {
-                var distancia = _geo.DistanciaMetros(
-                    latAnterior.Value,
-                    lonAnterior.Value,
-                    (double)candidato.Latitud,
-                    (double)candidato.Longitud);
-
-                distanciaMetros = (int)Math.Round(distancia);
-                cuadras = (short)_geo.Cuadras(distancia);
-                minutosAPie = (short)_geo.MinutosAPie(distancia);
+                minutoActual += seleccion.MinutosAPie.Value;
             }
+
+            var horaInicio = MinutosAHora(minutoActual);
+            minutoPorTurno[candidato.Turno] = minutoActual + candidato.DuracionSugeridaMinutos + DescansoMinutos;
 
             paradas.Add(new ParadaItinerario
             {
@@ -92,59 +90,84 @@ public class ItinerarioGenerator : IItinerarioGenerator
                 LugarId = candidato.Id,
                 Turno = candidato.Turno,
                 OrdenParada = orden,
-                HoraInicio = hora,
+                HoraInicio = horaInicio,
                 DuracionMinutos = candidato.DuracionSugeridaMinutos,
-                DistanciaMetrosDesdeAnterior = distanciaMetros,
-                CuadrasDesdeAnterior = cuadras,
-                MinutosAPieDesdeAnterior = minutosAPie,
+                DistanciaMetrosDesdeAnterior = seleccion.DistanciaMetros,
+                CuadrasDesdeAnterior = seleccion.Cuadras,
+                MinutosAPieDesdeAnterior = seleccion.MinutosAPie,
                 OrigenParada = OrigenParada.Ia,
                 FechaCreacion = DateTimeOffset.UtcNow
             });
 
             latAnterior = (double)candidato.Latitud;
             lonAnterior = (double)candidato.Longitud;
+            turnoAnterior = candidato.Turno;
         }
 
         return paradas;
     }
 
-    private LugarCandidatoDto? ElegirMasCercano(
+    private Aproximacion? ElegirMasCercano(
         IReadOnlyList<LugarCandidatoDto> candidatos,
         Turno turnoPreferido,
-        double? latReferencia,
-        double? lonReferencia,
-        double limiteCuadras)
-    {
-        var mismoTurno = candidatos.Where(c => c.Turno == turnoPreferido).ToList();
-        var ordenados = (mismoTurno.Count > 0 ? mismoTurno : candidatos.ToList())
-            .OrderBy(c => DistanciaDesdeReferencia(c, latReferencia, lonReferencia))
-            .ToList();
+        double latReferencia,
+        double lonReferencia,
+        short limiteCuadras)
+        => ElegirDelConjunto(
+                candidatos.Where(c => c.Turno == turnoPreferido),
+                latReferencia,
+                lonReferencia,
+                limiteCuadras)
+            ?? ElegirDelConjunto(candidatos, latReferencia, lonReferencia, limiteCuadras);
 
-        if (latReferencia.HasValue && lonReferencia.HasValue)
-        {
-            var dentroDelLimite = ordenados.FirstOrDefault(c =>
-                _geo.Cuadras(_geo.DistanciaMetros(
-                    latReferencia.Value,
-                    lonReferencia.Value,
-                    (double)c.Latitud,
-                    (double)c.Longitud)) <= limiteCuadras);
-
-            if (dentroDelLimite is not null)
+    private Aproximacion? ElegirDelConjunto(
+        IEnumerable<LugarCandidatoDto> candidatos,
+        double latReferencia,
+        double lonReferencia,
+        short limiteCuadras)
+        => candidatos
+            .Select(c =>
             {
-                return dentroDelLimite;
-            }
-        }
+                var metros = _geo.DistanciaMetros(latReferencia, lonReferencia, (double)c.Latitud, (double)c.Longitud);
+                return new Aproximacion(
+                    c,
+                    (int)Math.Round(metros),
+                    (short)_geo.Cuadras(metros),
+                    (short)_geo.MinutosAPie(metros));
+            })
+            .Where(a => a.Cuadras <= limiteCuadras)
+            .OrderBy(a => a.DistanciaMetros)
+            .FirstOrDefault();
 
-        return ordenados.FirstOrDefault();
+    private static Aproximacion? ElegirSemilla(
+        IReadOnlyList<LugarCandidatoDto> candidatos,
+        Turno turnoPreferido)
+    {
+        var elegido = candidatos
+            .Where(c => c.Turno == turnoPreferido)
+            .OrderBy(c => c.Id)
+            .FirstOrDefault()
+            ?? candidatos.OrderBy(c => c.Id).FirstOrDefault();
+
+        return elegido is null ? null : new Aproximacion(elegido, null, null, null);
     }
-
-    private double DistanciaDesdeReferencia(LugarCandidatoDto candidato, double? latReferencia, double? lonReferencia)
-        => latReferencia.HasValue && lonReferencia.HasValue
-            ? _geo.DistanciaMetros(latReferencia.Value, lonReferencia.Value, (double)candidato.Latitud, (double)candidato.Longitud)
-            : 0;
 
     private static bool DentroDePresupuesto(NivelPresupuesto candidato, NivelPresupuesto tope)
         => candidato <= tope;
+
+    private static int HoraBaseMinutos(Turno turno) => turno switch
+    {
+        Turno.Manana => 9 * 60,
+        Turno.Tarde => 14 * 60,
+        Turno.Noche => 19 * 60,
+        _ => 9 * 60
+    };
+
+    private static TimeOnly MinutosAHora(int minutos)
+    {
+        var limitado = Math.Clamp(minutos, 0, UltimoMinutoDelDia);
+        return new TimeOnly(limitado / 60, limitado % 60);
+    }
 
     private static IReadOnlyList<Turno> TurnosSegunAlcance(AlcanceTemporal alcance) => alcance switch
     {
@@ -154,11 +177,9 @@ public class ItinerarioGenerator : IItinerarioGenerator
         _ => new[] { Turno.Tarde }
     };
 
-    private static TimeOnly HoraBase(Turno turno) => turno switch
-    {
-        Turno.Manana => new TimeOnly(9, 0),
-        Turno.Tarde => new TimeOnly(14, 0),
-        Turno.Noche => new TimeOnly(19, 0),
-        _ => new TimeOnly(9, 0)
-    };
+    private sealed record Aproximacion(
+        LugarCandidatoDto Lugar,
+        int? DistanciaMetros,
+        short? Cuadras,
+        short? MinutosAPie);
 }
