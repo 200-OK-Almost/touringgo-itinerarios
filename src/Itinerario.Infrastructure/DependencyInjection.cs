@@ -1,7 +1,9 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Itinerario.Application.Interfaces;
 using Itinerario.Infrastructure.Data;
+using Itinerario.Infrastructure.Repositories;
 
 namespace Itinerario.Infrastructure;
 
@@ -15,7 +17,7 @@ public static class DependencyInjection
             options.UseNpgsql(
                 configuration.GetConnectionString("DefaultConnection")));
 
-        // Registrar repositorios
+        services.AddScoped<IViajeRepository, ViajeRepository>();
 
         return services;
     }
