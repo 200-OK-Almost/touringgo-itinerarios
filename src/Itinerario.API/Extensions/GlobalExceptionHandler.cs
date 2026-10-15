@@ -22,18 +22,21 @@ public class GlobalExceptionHandler : IExceptionHandler
             exception,
             "Unhandled exception occurred while processing the request.");
 
-        var statusCode = exception switch
+        var (statusCode, title) = exception switch
         {
-            NotFoundException => StatusCodes.Status404NotFound,
-            _ => StatusCodes.Status500InternalServerError
+            NotFoundException => (StatusCodes.Status404NotFound, "Resource not found"),
+            ReglaDeNegocioException => (StatusCodes.Status400BadRequest, "Business rule violation"),
+            AccesoDenegadoException => (StatusCodes.Status403Forbidden, "Forbidden"),
+            _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred.")
         };
 
         var problem = new ProblemDetails
         {
             Status = statusCode,
-            Title = statusCode == StatusCodes.Status404NotFound
-                ? "Resource not found"
-                : "An unexpected error occurred."
+            Title = title,
+            Detail = statusCode == StatusCodes.Status500InternalServerError
+                ? null
+                : exception.Message
         };
 
         httpContext.Response.StatusCode = statusCode;
