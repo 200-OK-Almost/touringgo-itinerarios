@@ -21,8 +21,5 @@ public class ViajeCreateDto
     public decimal? LongitudPartida { get; set; }
     public IReadOnlyCollection<short> CategoriaIds { get; set; } = new List<short>();
 
-    // TODO: tomar del claim "sub" del JWT cuando esté disponible
-    public Guid CreadoPorUsuarioId { get; set; }
-
     public ParametrosFamiliaDto? ParametrosFamilia { get; set; }
 }

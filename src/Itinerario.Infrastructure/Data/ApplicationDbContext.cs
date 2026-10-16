@@ -23,6 +23,10 @@ public class ApplicationDbContext : DbContext
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);
 
+        modelBuilder.Entity<Viaje>()
+            .Property<uint>("xmin")
+            .IsRowVersion();
+
         base.OnModelCreating(modelBuilder);
     }
 }

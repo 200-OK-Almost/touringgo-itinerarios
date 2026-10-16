@@ -11,6 +11,7 @@ public class ViajeService : IViajeService
 {
     private const int LongitudCodigoInvitacion = 10;
     private const string CaracteresCodigoInvitacion = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    private const int MaxIntentosCodigo = 10;
     private const int PaginaPorDefecto = 1;
     private const int TamanoMinimo = 1;
     private const int TamanoMaximo = 100;
@@ -22,22 +23,34 @@ public class ViajeService : IViajeService
         _repository = repository;
     }
 
-    public async Task<ViajeResponseDto> CrearAsync(ViajeCreateDto dto, CancellationToken cancellationToken = default)
+    public async Task<ViajeResponseDto> CrearAsync(ViajeCreateDto dto, Guid creadoPorUsuarioId, CancellationToken cancellationToken = default)
     {
-        var codigoInvitacion = await GenerarCodigoInvitacionUnicoAsync(cancellationToken);
+        for (var intento = 0; intento < MaxIntentosCodigo; intento++)
+        {
+            var codigoInvitacion = await GenerarCodigoInvitacionUnicoAsync(cancellationToken);
 
-        var viaje = Viaje.Crear(
-            Guid.NewGuid(),
-            MapearDatos(dto),
-            dto.CreadoPorUsuarioId,
-            codigoInvitacion,
-            dto.CategoriaIds,
-            MapearParametrosFamilia(dto.ParametrosFamilia));
+            var viaje = Viaje.Crear(
+                Guid.NewGuid(),
+                MapearDatos(dto),
+                creadoPorUsuarioId,
+                codigoInvitacion,
+                dto.CategoriaIds,
+                MapearParametrosFamilia(dto.ParametrosFamilia));
 
-        await _repository.AgregarAsync(viaje, cancellationToken);
-        await _repository.GuardarCambiosAsync(cancellationToken);
+            try
+            {
+                await _repository.AgregarAsync(viaje, cancellationToken);
+                await _repository.GuardarCambiosAsync(cancellationToken);
 
-        return MapearRespuesta(viaje);
+                return MapearRespuesta(viaje);
+            }
+            catch (CodigoInvitacionDuplicadoException)
+            {
+                _repository.Descartar(viaje);
+            }
+        }
+
+        throw new InvalidOperationException("No se pudo generar un código de invitación único.");
     }
 
     public async Task<ViajeResponseDto> ObtenerPorIdAsync(Guid id, CancellationToken cancellationToken = default)
@@ -75,10 +88,12 @@ public class ViajeService : IViajeService
             throw new AccesoDenegadoException("Solo un administrador del viaje puede modificarlo.");
         }
 
-        viaje.ActualizarDatos(MapearDatos(dto), dto.CategoriaIds, MapearParametrosFamilia(dto.ParametrosFamilia));
+        viaje.ActualizarDatos(MapearDatos(dto));
         viaje.CambiarEstado(dto.Estado);
 
         _repository.Actualizar(viaje);
+        _repository.SincronizarEtiquetas(viaje, dto.CategoriaIds);
+        _repository.EstablecerParametrosFamilia(viaje, MapearParametrosFamilia(dto.ParametrosFamilia));
         await _repository.GuardarCambiosAsync(cancellationToken);
 
         return MapearRespuesta(viaje);
@@ -104,9 +119,17 @@ public class ViajeService : IViajeService
 
         if (viaje.Miembros.All(m => m.UsuarioId != usuarioId))
         {
-            viaje.AgregarMiembro(usuarioId, RolMiembro.Miembro);
+            var miembro = new MiembroViaje
+            {
+                ViajeId = viaje.Id,
+                UsuarioId = usuarioId,
+                Rol = RolMiembro.Miembro,
+                FechaIncorporacion = DateTimeOffset.UtcNow
+            };
 
-            _repository.Actualizar(viaje);
+            viaje.Miembros.Add(miembro);
+            _repository.AgregarMiembro(miembro);
+
             await _repository.GuardarCambiosAsync(cancellationToken);
         }
 
@@ -119,7 +142,7 @@ public class ViajeService : IViajeService
 
     private async Task<string> GenerarCodigoInvitacionUnicoAsync(CancellationToken cancellationToken)
     {
-        for (var intento = 0; intento < 10; intento++)
+        for (var intento = 0; intento < MaxIntentosCodigo; intento++)
         {
             var bytes = RandomNumberGenerator.GetBytes(LongitudCodigoInvitacion);
             var codigo = new string(bytes

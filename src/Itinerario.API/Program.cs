@@ -1,5 +1,9 @@
+using System.Text.Json.Serialization;
 using Itinerario.API.Extensions;
+using Itinerario.API.Filters;
+using Itinerario.API.Services;
 using Itinerario.Application;
+using Itinerario.Application.Interfaces;
 using Itinerario.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -7,9 +11,18 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddApplication();
-builder.Services.AddControllers();
+builder.Services.AddControllers(options =>
+{
+    options.Filters.Add<ValidationFilter>();
+}).AddJsonOptions(options =>
+{
+    options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
 
 // Add services to the container.
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
