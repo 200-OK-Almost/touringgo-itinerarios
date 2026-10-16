@@ -11,5 +11,6 @@ public interface IViajeRepository
     Task AgregarAsync(Viaje viaje, CancellationToken cancellationToken = default);
     void Actualizar(Viaje viaje);
     void Eliminar(Viaje viaje);
+    void Descartar(Viaje viaje);
     Task<int> GuardarCambiosAsync(CancellationToken cancellationToken = default);
 }

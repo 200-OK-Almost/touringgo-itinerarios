@@ -1,8 +1,10 @@
 using Itinerario.Application;
 using Itinerario.Application.Interfaces;
 using Itinerario.Domain.Entities;
+using Itinerario.Domain.Exceptions;
 using Itinerario.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Itinerario.Infrastructure.Repositories;
 
@@ -64,6 +66,23 @@ public class ViajeRepository : IViajeRepository
     public void Eliminar(Viaje viaje)
         => _context.Viajes.Remove(viaje);
 
-    public Task<int> GuardarCambiosAsync(CancellationToken cancellationToken = default)
-        => _context.SaveChangesAsync(cancellationToken);
+    public void Descartar(Viaje viaje)
+        => _context.Entry(viaje).State = EntityState.Detached;
+
+    public async Task<int> GuardarCambiosAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (EsCodigoInvitacionDuplicado(ex))
+        {
+            throw new CodigoInvitacionDuplicadoException("El código de invitación ya existe.");
+        }
+    }
+
+    private static bool EsCodigoInvitacionDuplicado(DbUpdateException ex)
+        => ex.InnerException is PostgresException postgres
+            && postgres.SqlState == PostgresErrorCodes.UniqueViolation
+            && postgres.ConstraintName == "IX_viajes_codigo_invitacion";
 }

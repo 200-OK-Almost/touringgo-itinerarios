@@ -11,6 +11,7 @@ public class ViajeService : IViajeService
 {
     private const int LongitudCodigoInvitacion = 10;
     private const string CaracteresCodigoInvitacion = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    private const int MaxIntentosCodigo = 10;
     private const int PaginaPorDefecto = 1;
     private const int TamanoMinimo = 1;
     private const int TamanoMaximo = 100;
@@ -24,20 +25,32 @@ public class ViajeService : IViajeService
 
     public async Task<ViajeResponseDto> CrearAsync(ViajeCreateDto dto, Guid creadoPorUsuarioId, CancellationToken cancellationToken = default)
     {
-        var codigoInvitacion = await GenerarCodigoInvitacionUnicoAsync(cancellationToken);
+        for (var intento = 0; intento < MaxIntentosCodigo; intento++)
+        {
+            var codigoInvitacion = await GenerarCodigoInvitacionUnicoAsync(cancellationToken);
 
-        var viaje = Viaje.Crear(
-            Guid.NewGuid(),
-            MapearDatos(dto),
-            creadoPorUsuarioId,
-            codigoInvitacion,
-            dto.CategoriaIds,
-            MapearParametrosFamilia(dto.ParametrosFamilia));
+            var viaje = Viaje.Crear(
+                Guid.NewGuid(),
+                MapearDatos(dto),
+                creadoPorUsuarioId,
+                codigoInvitacion,
+                dto.CategoriaIds,
+                MapearParametrosFamilia(dto.ParametrosFamilia));
 
-        await _repository.AgregarAsync(viaje, cancellationToken);
-        await _repository.GuardarCambiosAsync(cancellationToken);
+            try
+            {
+                await _repository.AgregarAsync(viaje, cancellationToken);
+                await _repository.GuardarCambiosAsync(cancellationToken);
 
-        return MapearRespuesta(viaje);
+                return MapearRespuesta(viaje);
+            }
+            catch (CodigoInvitacionDuplicadoException)
+            {
+                _repository.Descartar(viaje);
+            }
+        }
+
+        throw new InvalidOperationException("No se pudo generar un código de invitación único.");
     }
 
     public async Task<ViajeResponseDto> ObtenerPorIdAsync(Guid id, CancellationToken cancellationToken = default)
@@ -119,7 +132,7 @@ public class ViajeService : IViajeService
 
     private async Task<string> GenerarCodigoInvitacionUnicoAsync(CancellationToken cancellationToken)
     {
-        for (var intento = 0; intento < 10; intento++)
+        for (var intento = 0; intento < MaxIntentosCodigo; intento++)
         {
             var bytes = RandomNumberGenerator.GetBytes(LongitudCodigoInvitacion);
             var codigo = new string(bytes
