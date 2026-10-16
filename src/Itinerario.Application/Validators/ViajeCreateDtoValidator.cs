@@ -46,9 +46,6 @@ public class ViajeCreateDtoValidator : AbstractValidator<ViajeCreateDto>
             .Must(c => c is { Count: >= 2 and <= 4 })
             .WithMessage("Debe elegir entre 2 y 4 etiquetas.");
 
-        RuleFor(v => v.CreadoPorUsuarioId)
-            .NotEmpty();
-
         RuleFor(v => v.ParametrosFamilia)
             .Null()
             .When(v => v.TipoViaje != TipoViaje.Familia)

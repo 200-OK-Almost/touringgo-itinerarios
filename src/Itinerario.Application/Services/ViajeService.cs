@@ -22,14 +22,14 @@ public class ViajeService : IViajeService
         _repository = repository;
     }
 
-    public async Task<ViajeResponseDto> CrearAsync(ViajeCreateDto dto, CancellationToken cancellationToken = default)
+    public async Task<ViajeResponseDto> CrearAsync(ViajeCreateDto dto, Guid creadoPorUsuarioId, CancellationToken cancellationToken = default)
     {
         var codigoInvitacion = await GenerarCodigoInvitacionUnicoAsync(cancellationToken);
 
         var viaje = Viaje.Crear(
             Guid.NewGuid(),
             MapearDatos(dto),
-            dto.CreadoPorUsuarioId,
+            creadoPorUsuarioId,
             codigoInvitacion,
             dto.CategoriaIds,
             MapearParametrosFamilia(dto.ParametrosFamilia));
