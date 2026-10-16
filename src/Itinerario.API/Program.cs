@@ -1,11 +1,16 @@
 using Itinerario.API.Extensions;
+using Itinerario.API.Services;
 using Itinerario.Application;
+using Itinerario.Application.Interfaces;
 using Itinerario.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
+
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddApplication();
