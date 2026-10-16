@@ -61,10 +61,68 @@ public class ViajeRepository : IViajeRepository
         => await _context.Viajes.AddAsync(viaje, cancellationToken);
 
     public void Actualizar(Viaje viaje)
-        => _context.Viajes.Update(viaje);
+        => _context.Entry(viaje).State = EntityState.Modified;
 
     public void Eliminar(Viaje viaje)
         => _context.Viajes.Remove(viaje);
+
+    public void AgregarMiembro(MiembroViaje miembro)
+        => _context.MiembrosViaje.Add(miembro);
+
+    public void SincronizarEtiquetas(
+        Viaje viaje,
+        IReadOnlyCollection<short> categoriaIds)
+    {
+        var actuales = viaje.Etiquetas.ToList();
+        var deseadas = categoriaIds.ToHashSet();
+
+        foreach (var etiqueta in actuales.Where(e => !deseadas.Contains(e.CategoriaId)))
+        {
+            viaje.Etiquetas.Remove(etiqueta);
+            _context.EtiquetasViaje.Remove(etiqueta);
+        }
+
+        var existentes = actuales.Select(e => e.CategoriaId).ToHashSet();
+
+        foreach (var categoriaId in deseadas.Where(c => !existentes.Contains(c)))
+        {
+            var nueva = new EtiquetaViaje { ViajeId = viaje.Id, CategoriaId = categoriaId };
+            viaje.Etiquetas.Add(nueva);
+            _context.EtiquetasViaje.Add(nueva);
+        }
+    }
+
+    public void EstablecerParametrosFamilia(
+        Viaje viaje,
+        ParametrosFamilia? parametros)
+    {
+        if (parametros is null)
+        {
+            if (viaje.ParametrosFamilia is not null)
+            {
+                _context.ParametrosFamilia.Remove(viaje.ParametrosFamilia);
+                viaje.ParametrosFamilia = null;
+            }
+
+            return;
+        }
+
+        if (viaje.ParametrosFamilia is null)
+        {
+            parametros.ViajeId = viaje.Id;
+            viaje.ParametrosFamilia = parametros;
+            _context.ParametrosFamilia.Add(parametros);
+            return;
+        }
+
+        var existente = viaje.ParametrosFamilia;
+        existente.CantidadAcompanantes = parametros.CantidadAcompanantes;
+        existente.HayNinos = parametros.HayNinos;
+        existente.CantidadNinos = parametros.CantidadNinos;
+        existente.MovilidadReducida = parametros.MovilidadReducida;
+        existente.RequiereRitmoBajo = parametros.RequiereRitmoBajo;
+        existente.RequiereMenuInfantil = parametros.RequiereMenuInfantil;
+    }
 
     public void Descartar(Viaje viaje)
         => _context.Entry(viaje).State = EntityState.Detached;

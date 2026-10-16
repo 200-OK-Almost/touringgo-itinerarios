@@ -11,6 +11,9 @@ public interface IViajeRepository
     Task AgregarAsync(Viaje viaje, CancellationToken cancellationToken = default);
     void Actualizar(Viaje viaje);
     void Eliminar(Viaje viaje);
+    void AgregarMiembro(MiembroViaje miembro);
+    void SincronizarEtiquetas(Viaje viaje, IReadOnlyCollection<short> categoriaIds);
+    void EstablecerParametrosFamilia(Viaje viaje, ParametrosFamilia? parametros);
     void Descartar(Viaje viaje);
     Task<int> GuardarCambiosAsync(CancellationToken cancellationToken = default);
 }

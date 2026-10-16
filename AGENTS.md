@@ -50,6 +50,7 @@ dotnet ef database update --project src/Itinerario.Infrastructure --startup-proj
 - **Concurrencia**: `Viaje` usa `xmin` como rowversion; `DbUpdateConcurrencyException` → `ConflictoDeConcurrenciaException` → **409**. Difícil de reproducir con requests secuenciales.
 - **Código de invitación**: el repo traduce la violación Postgres **23505** del constraint `IX_viajes_codigo_invitacion` y `ViajeService.CrearAsync` reintenta la generación.
 - Los enums se persisten como `text`. Ver `docs/modelo-datos.md` para el DER completo (tablas, índices, enums, referencias externas).
+- **Actualización de hijos**: `ViajeRepository.Actualizar` NO debe usar `Update(viaje)` en cascada ni reemplazar colecciones/trackear instancias nuevas con la misma clave (los hijos tienen claves ya seteadas → EF los marca `Modified` en vez de `Added/Deleted`, o lanza *identity conflict*). Los hijos se sincronizan mutando la colección trackeada: `AgregarMiembro`, `SincronizarEtiquetas` y `EstablecerParametrosFamilia` marcan `Add`/`Remove` explícitos; `Viaje.ActualizarDatos` solo toca escalares.
 - `GeoCalculator`, `ItinerarioGenerator` y `Viaje` (dominio) son clases puras/testeables, sin acceso a DB ni HTTP.
 - Connection string local: `Host=localhost;Port=5432;Database=itinerarios_db;Username=postgres;Password=postgres` (`docker compose` expone postgres en 5432).
 

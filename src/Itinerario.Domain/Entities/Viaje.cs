@@ -49,13 +49,25 @@ public class Viaje
             FechaCreacion = DateTimeOffset.UtcNow
         };
 
-        viaje.ActualizarDatos(datos, categoriaIds, parametros);
+        viaje.ActualizarDatos(datos);
+
+        foreach (var categoriaId in categoriaIds)
+        {
+            viaje.Etiquetas.Add(new EtiquetaViaje { ViajeId = id, CategoriaId = categoriaId });
+        }
+
+        if (parametros is not null)
+        {
+            parametros.ViajeId = id;
+            viaje.ParametrosFamilia = parametros;
+        }
+
         viaje.AgregarMiembro(creadoPorUsuarioId, RolMiembro.Administrador);
 
         return viaje;
     }
 
-    public void ActualizarDatos(DatosViaje datos, IEnumerable<short> categoriaIds, ParametrosFamilia? parametros)
+    public void ActualizarDatos(DatosViaje datos)
     {
         Titulo = datos.Titulo;
         TipoViaje = datos.TipoViaje;
@@ -73,17 +85,6 @@ public class Viaje
         LatitudPartida = datos.LatitudPartida;
         LongitudPartida = datos.LongitudPartida;
         FechaActualizacion = DateTimeOffset.UtcNow;
-
-        Etiquetas = categoriaIds
-            .Select(categoriaId => new EtiquetaViaje { ViajeId = Id, CategoriaId = categoriaId })
-            .ToList();
-
-        ParametrosFamilia = parametros;
-
-        if (ParametrosFamilia is not null)
-        {
-            ParametrosFamilia.ViajeId = Id;
-        }
     }
 
     public void CambiarEstado(EstadoViaje nuevoEstado)

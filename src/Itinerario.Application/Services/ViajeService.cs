@@ -88,10 +88,12 @@ public class ViajeService : IViajeService
             throw new AccesoDenegadoException("Solo un administrador del viaje puede modificarlo.");
         }
 
-        viaje.ActualizarDatos(MapearDatos(dto), dto.CategoriaIds, MapearParametrosFamilia(dto.ParametrosFamilia));
+        viaje.ActualizarDatos(MapearDatos(dto));
         viaje.CambiarEstado(dto.Estado);
 
         _repository.Actualizar(viaje);
+        _repository.SincronizarEtiquetas(viaje, dto.CategoriaIds);
+        _repository.EstablecerParametrosFamilia(viaje, MapearParametrosFamilia(dto.ParametrosFamilia));
         await _repository.GuardarCambiosAsync(cancellationToken);
 
         return MapearRespuesta(viaje);
@@ -117,9 +119,17 @@ public class ViajeService : IViajeService
 
         if (viaje.Miembros.All(m => m.UsuarioId != usuarioId))
         {
-            viaje.AgregarMiembro(usuarioId, RolMiembro.Miembro);
+            var miembro = new MiembroViaje
+            {
+                ViajeId = viaje.Id,
+                UsuarioId = usuarioId,
+                Rol = RolMiembro.Miembro,
+                FechaIncorporacion = DateTimeOffset.UtcNow
+            };
 
-            _repository.Actualizar(viaje);
+            viaje.Miembros.Add(miembro);
+            _repository.AgregarMiembro(miembro);
+
             await _repository.GuardarCambiosAsync(cancellationToken);
         }
 
