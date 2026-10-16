@@ -28,6 +28,7 @@ public class GlobalExceptionHandler : IExceptionHandler
             ReglaDeNegocioException => (StatusCodes.Status400BadRequest, "Business rule violation"),
             AccesoDenegadoException => (StatusCodes.Status403Forbidden, "Forbidden"),
             UnauthorizedAccessException => (StatusCodes.Status401Unauthorized, "Unauthorized"),
+            ConflictoDeConcurrenciaException => (StatusCodes.Status409Conflict, "Conflict"),
             _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred.")
         };
 

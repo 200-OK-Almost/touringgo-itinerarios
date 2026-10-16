@@ -79,6 +79,10 @@ public class ViajeRepository : IViajeRepository
         {
             throw new CodigoInvitacionDuplicadoException("El código de invitación ya existe.");
         }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new ConflictoDeConcurrenciaException("El viaje fue modificado por otro usuario.");
+        }
     }
 
     private static bool EsCodigoInvitacionDuplicado(DbUpdateException ex)
