@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Itinerario.Application.Interfaces;
+using Itinerario.Infrastructure.Clients;
 using Itinerario.Infrastructure.Data;
 using Itinerario.Infrastructure.Repositories;
 
@@ -18,6 +19,7 @@ public static class DependencyInjection
                 configuration.GetConnectionString("DefaultConnection")));
 
         services.AddScoped<IViajeRepository, ViajeRepository>();
+        services.AddScoped<ILugaresClient, LugaresClient>();
 
         return services;
     }
