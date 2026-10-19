@@ -11,11 +11,11 @@ public interface IItinerarioRefiner
         TipoRefinamiento tipo,
         ItinerarioEntity itinerario,
         IReadOnlyDictionary<Guid, LugarCandidatoDto> lugaresActuales,
-        IReadOnlyCollection<LugarCandidatoDto> candidatos,
+        ICollection<LugarCandidatoDto> candidatos,
         Viaje viaje);
 
     IReadOnlyCollection<ParadaItinerario> SugerirTurnosLibres(
         ItinerarioEntity itinerario,
-        IReadOnlyCollection<LugarCandidatoDto> candidatos,
+        ICollection<LugarCandidatoDto> candidatos,
         Viaje viaje);
 }
