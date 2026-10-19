@@ -15,6 +15,7 @@ public static class DependencyInjection
         services.AddScoped<IGeoCalculator, GeoCalculator>();
         services.AddScoped<IItinerarioGenerator, ItinerarioGenerator>();
         services.AddScoped<IViajeService, ViajeService>();
+        services.AddScoped<IItinerarioService, ItinerarioService>();
 
         return services;
     }
