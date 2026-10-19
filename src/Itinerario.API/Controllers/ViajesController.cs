@@ -84,4 +84,28 @@ public class ViajesController : ControllerBase
         Guid id,
         CancellationToken cancellationToken)
         => Ok(await _itinerarioService.ObtenerAsync(id, cancellationToken));
+
+    [HttpPost("{id:guid}/refinar")]
+    [ProducesResponseType(typeof(IReadOnlyCollection<ItinerarioResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<IReadOnlyCollection<ItinerarioResponseDto>>> Refinar(
+        Guid id,
+        [FromBody] RefinamientoDto dto,
+        CancellationToken cancellationToken)
+        => Ok(await _itinerarioService.RefinarAsync(id, dto.Tipo, dto.NumeroDia, _currentUser.UsuarioId, cancellationToken));
+
+    [HttpPost("{id:guid}/sugerencias-turnos-libres")]
+    [ProducesResponseType(typeof(IReadOnlyCollection<ItinerarioResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<IReadOnlyCollection<ItinerarioResponseDto>>> SugerirTurnosLibres(
+        Guid id,
+        [FromBody] SugerenciasTurnoLibreDto dto,
+        CancellationToken cancellationToken)
+        => Ok(await _itinerarioService.SugerirTurnosLibresAsync(id, dto.NumeroDia, _currentUser.UsuarioId, cancellationToken));
 }
