@@ -9,11 +9,16 @@ namespace Itinerario.API.Controllers;
 public class ViajesController : ControllerBase
 {
     private readonly IViajeService _service;
+    private readonly IItinerarioService _itinerarioService;
     private readonly ICurrentUser _currentUser;
 
-    public ViajesController(IViajeService service, ICurrentUser currentUser)
+    public ViajesController(
+        IViajeService service,
+        IItinerarioService itinerarioService,
+        ICurrentUser currentUser)
     {
         _service = service;
+        _itinerarioService = itinerarioService;
         _currentUser = currentUser;
     }
 
@@ -61,4 +66,22 @@ public class ViajesController : ControllerBase
         [FromBody] UnirseViajeDto dto,
         CancellationToken cancellationToken)
         => Ok(await _service.UnirseAsync(dto.CodigoInvitacion, _currentUser.UsuarioId, cancellationToken));
+
+    [HttpPost("{id:guid}/itinerario")]
+    [ProducesResponseType(typeof(IReadOnlyCollection<ItinerarioResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyCollection<ItinerarioResponseDto>>> GenerarItinerario(
+        Guid id,
+        CancellationToken cancellationToken)
+        => Ok(await _itinerarioService.GenerarAsync(id, _currentUser.UsuarioId, cancellationToken));
+
+    [HttpGet("{id:guid}/itinerario")]
+    [ProducesResponseType(typeof(IReadOnlyCollection<ItinerarioResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyCollection<ItinerarioResponseDto>>> ObtenerItinerario(
+        Guid id,
+        CancellationToken cancellationToken)
+        => Ok(await _itinerarioService.ObtenerAsync(id, cancellationToken));
 }
