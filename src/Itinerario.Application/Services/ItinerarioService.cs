@@ -97,6 +97,21 @@ public class ItinerarioService : IItinerarioService
         return itinerarios.Select(MapearRespuesta).ToList();
     }
 
+    public Task<IReadOnlyCollection<ItinerarioResponseDto>> RefinarAsync(
+        Guid viajeId,
+        TipoRefinamiento tipo,
+        short? numeroDia,
+        Guid usuarioIdSolicitante,
+        CancellationToken cancellationToken = default)
+        => throw new NotImplementedException();
+
+    public Task<IReadOnlyCollection<ItinerarioResponseDto>> SugerirTurnosLibresAsync(
+        Guid viajeId,
+        short? numeroDia,
+        Guid usuarioIdSolicitante,
+        CancellationToken cancellationToken = default)
+        => throw new NotImplementedException();
+
     private static IReadOnlyList<DiaPlanificado> CalcularDias(Viaje viaje)
     {
         if (viaje.FechaInicio is null || viaje.FechaFin is null || viaje.FechaFin < viaje.FechaInicio)

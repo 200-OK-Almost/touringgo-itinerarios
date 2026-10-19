@@ -2,6 +2,7 @@ using Itinerario.Application.Interfaces;
 using Itinerario.Domain.Exceptions;
 using Itinerario.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Itinerario.Domain.Entities;
 using ItinerarioEntity = Itinerario.Domain.Entities.Itinerario;
 
 namespace Itinerario.Infrastructure.Repositories;
@@ -51,4 +52,10 @@ public class ItinerarioRepository : IItinerarioRepository
             throw new ConflictoDeConcurrenciaException("El viaje fue modificado por otro usuario.");
         }
     }
+
+    public Task<int> GuardarCambiosAsync(CancellationToken cancellationToken = default)
+        => throw new NotImplementedException();
+
+    public void AgregarParada(ParadaItinerario parada)
+        => throw new NotImplementedException();
 }
