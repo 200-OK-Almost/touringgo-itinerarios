@@ -53,9 +53,18 @@ public class ItinerarioRepository : IItinerarioRepository
         }
     }
 
-    public Task<int> GuardarCambiosAsync(CancellationToken cancellationToken = default)
-        => throw new NotImplementedException();
+    public async Task<int> GuardarCambiosAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new ConflictoDeConcurrenciaException("El viaje fue modificado por otro usuario.");
+        }
+    }
 
     public void AgregarParada(ParadaItinerario parada)
-        => throw new NotImplementedException();
+        => _context.ParadasItinerario.Add(parada);
 }
