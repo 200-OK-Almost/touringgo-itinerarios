@@ -13,7 +13,7 @@ Contexto para trabajar con opencode en `turinggo-itinerarios`. Asistente de plan
   - `tests/Itinerario.UnitTests` → xUnit, referencia a `Itinerario.Application`.
 - Dirección de dependencias: `API → Application + Infrastructure`; `Infrastructure → Application + Domain`; `Application → Domain`.
 - Base de datos: `itinerarios_db` (database-per-service).
-- Endpoints: `POST /api/viajes`, `GET /api/viajes?pagina&tamano`, `GET /api/viajes/{id}`, `PUT /api/viajes/{id}`, `DELETE /api/viajes/{id}`, `POST /api/viajes/unirse`.
+- Endpoints: `POST /api/viajes`, `GET /api/viajes?pagina&tamano`, `GET /api/viajes/{id}`, `PUT /api/viajes/{id}`, `DELETE /api/viajes/{id}`, `POST /api/viajes/unirse`, `POST /api/viajes/{id}/itinerario`, `GET /api/viajes/{id}/itinerario`.
 
 ## Reglas de oro (microservicios)
 
@@ -51,6 +51,7 @@ dotnet ef database update --project src/Itinerario.Infrastructure --startup-proj
 - **Código de invitación**: el repo traduce la violación Postgres **23505** del constraint `IX_viajes_codigo_invitacion` y `ViajeService.CrearAsync` reintenta la generación.
 - Los enums se persisten como `text`. Ver `docs/modelo-datos.md` para el DER completo (tablas, índices, enums, referencias externas).
 - **Actualización de hijos**: `ViajeRepository.Actualizar` NO debe usar `Update(viaje)` en cascada ni reemplazar colecciones/trackear instancias nuevas con la misma clave (los hijos tienen claves ya seteadas → EF los marca `Modified` en vez de `Added/Deleted`, o lanza *identity conflict*). Los hijos se sincronizan mutando la colección trackeada: `AgregarMiembro`, `SincronizarEtiquetas` y `EstablecerParametrosFamilia` marcan `Add`/`Remove` explícitos; `Viaje.ActualizarDatos` solo toca escalares.
+- **Generación de itinerario**: `ItinerarioService.GenerarAsync` arma 1 `Itinerario` por día (rango `FechaInicio..FechaFin`; 1 si faltan fechas). Genera día por día con un pool de lugares que se achica; si se agota, los días siguientes quedan con 0 paradas. v1: el origen no se recalcula al último lugar del día anterior. `ItinerarioRepository.ReemplazarAsync` reemplaza los itinerarios previos en una transacción con **dos** `SaveChanges` (borrar, luego insertar) para no violar el UNIQUE `(viaje_id, numero_dia)`; el viaje y los itinerarios se guardan juntos porque comparten el `DbContext` scoped.
 - `GeoCalculator`, `ItinerarioGenerator` y `Viaje` (dominio) son clases puras/testeables, sin acceso a DB ni HTTP.
 - Connection string local: `Host=localhost;Port=5432;Database=itinerarios_db;Username=postgres;Password=postgres` (`docker compose` expone postgres en 5432).
 
@@ -61,8 +62,10 @@ dotnet ef database update --project src/Itinerario.Infrastructure --startup-proj
 
 ## Estado actual
 
-Hecho (fases 1-4): dominio (enums + entidades + comportamiento), `ApplicationDbContext` con mapeo `snake_case` y migraciones, DTOs + validadores, servicios (`GeoCalculator`, `ItinerarioGenerator`, `ViajeService` con permisos y paginación), `ViajeRepository` EF, `LugaresClient` stub, `ViajesController` (CRUD + unirse), validación automática, identidad, 23505 + reintento, concurrencia `xmin` → 409, y tests de `GeoCalculator` (15).
+Hecho (fases 1-5): dominio (enums + entidades + comportamiento), `ApplicationDbContext` con mapeo `snake_case` y migraciones, DTOs + validadores, servicios (`GeoCalculator`, `ItinerarioGenerator`, `ViajeService` con permisos y paginación), `ViajeRepository` EF, `LugaresClient` stub, `ViajesController` (CRUD + unirse), validación automática, identidad, 23505 + reintento, concurrencia `xmin` → 409, y tests de `GeoCalculator` + `ItinerarioGenerator` (24).
 
-Pendiente: endpoint de **generación de itinerario** (reglas + `ILugaresClient`), refinamientos de un clic (*más económico*, *reducir caminata*, *más aire libre*), sugerencias de turno libre, integración real con Usuarios/Lugares por REST, JWT real (reemplazar `X-Usuario-Id`) y Gemini.
+Fase 5 (generación de itinerario end-to-end): `ItinerarioService` + `ItinerarioRepository`, endpoints `POST`/`GET /api/viajes/{id}/itinerario`, transición `Borrador → Planificado` al generar, un itinerario por día y reemplazo atómico al regenerar.
+
+Pendiente: refinamientos de un clic (*más económico*, *reducir caminata*, *más aire libre*), sugerencias de turno libre, integración real con Usuarios/Lugares por REST (reemplazar `LugaresClient` stub), JWT real (reemplazar `X-Usuario-Id`) y Gemini (`sugerencia_ia`).
 
 Antes de dar una tarea por terminada: `dotnet build Itinerario.sln` sin errores y `dotnet test` en verde.
