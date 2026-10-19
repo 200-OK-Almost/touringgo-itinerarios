@@ -19,6 +19,7 @@ public static class DependencyInjection
                 configuration.GetConnectionString("DefaultConnection")));
 
         services.AddScoped<IViajeRepository, ViajeRepository>();
+        services.AddScoped<IItinerarioRepository, ItinerarioRepository>();
         services.AddScoped<ILugaresClient, LugaresClient>();
 
         return services;
