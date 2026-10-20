@@ -13,7 +13,7 @@ Contexto para trabajar con opencode en `turinggo-itinerarios`. Asistente de plan
   - `tests/Itinerario.UnitTests` → xUnit, referencia a `Itinerario.Application`.
 - Dirección de dependencias: `API → Application + Infrastructure`; `Infrastructure → Application + Domain`; `Application → Domain`.
 - Base de datos: `itinerarios_db` (database-per-service).
-- Endpoints: `POST /api/viajes`, `GET /api/viajes?pagina&tamano`, `GET /api/viajes/{id}`, `PUT /api/viajes/{id}`, `DELETE /api/viajes/{id}`, `POST /api/viajes/unirse`, `POST /api/viajes/{id}/itinerario`, `GET /api/viajes/{id}/itinerario`.
+- Endpoints: `POST /api/viajes`, `GET /api/viajes?pagina&tamano`, `GET /api/viajes/{id}`, `PUT /api/viajes/{id}`, `DELETE /api/viajes/{id}`, `POST /api/viajes/unirse`, `POST /api/viajes/{id}/itinerario`, `GET /api/viajes/{id}/itinerario`, `POST /api/viajes/{id}/refinar`, `POST /api/viajes/{id}/sugerencias-turnos-libres`.
 
 ## Reglas de oro (microservicios)
 
@@ -62,10 +62,12 @@ dotnet ef database update --project src/Itinerario.Infrastructure --startup-proj
 
 ## Estado actual
 
-Hecho (fases 1-5): dominio (enums + entidades + comportamiento), `ApplicationDbContext` con mapeo `snake_case` y migraciones, DTOs + validadores, servicios (`GeoCalculator`, `ItinerarioGenerator`, `ViajeService` con permisos y paginación), `ViajeRepository` EF, `LugaresClient` stub, `ViajesController` (CRUD + unirse), validación automática, identidad, 23505 + reintento, concurrencia `xmin` → 409, y tests de `GeoCalculator` + `ItinerarioGenerator` (24).
+Hecho (fases 1-6): dominio (enums + entidades + comportamiento), `ApplicationDbContext` con mapeo `snake_case` y migraciones, DTOs + validadores, servicios (`GeoCalculator`, `ItinerarioGenerator`, `ItinerarioRefiner`, `ViajeService` con permisos y paginación, `ItinerarioService`), `ViajeRepository` e `ItinerarioRepository` EF, `LugaresClient` stub, `ViajesController` (CRUD + unirse + itinerario + refinamientos), validación automática, identidad, 23505 + reintento, concurrencia `xmin` → 409, y tests de `GeoCalculator`, `ItinerarioGenerator` e `ItinerarioRefiner` (34).
 
 Fase 5 (generación de itinerario end-to-end): `ItinerarioService` + `ItinerarioRepository`, endpoints `POST`/`GET /api/viajes/{id}/itinerario`, transición `Borrador → Planificado` al generar, un itinerario por día y reemplazo atómico al regenerar.
 
-Pendiente: refinamientos de un clic (*más económico*, *reducir caminata*, *más aire libre*), sugerencias de turno libre, integración real con Usuarios/Lugares por REST (reemplazar `LugaresClient` stub), JWT real (reemplazar `X-Usuario-Id`) y Gemini (`sugerencia_ia`).
+Fase 6 (refinamientos y sugerencias de turno libre): `ItinerarioRefiner` puro con swaps puntuales (`MasEconomico`, `ReducirCaminata`, `MasAireLibre`), endpoints `POST /api/viajes/{id}/refinar` y `POST /api/viajes/{id}/sugerencias-turnos-libres`, persistencia atómica con `GuardarCambiosAsync`/`AgregarParada`, sugerencias con `OrigenParada = SugerenciaHueco`, validación de `numeroDia` → 400 y 10 tests nuevos.
+
+Pendiente: integración real con Usuarios/Lugares por REST (reemplazar `LugaresClient` stub), JWT real (reemplazar `X-Usuario-Id`) y Gemini (`sugerencia_ia`).
 
 Antes de dar una tarea por terminada: `dotnet build Itinerario.sln` sin errores y `dotnet test` en verde.
