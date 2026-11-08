@@ -5,6 +5,8 @@ using Itinerario.API.Services;
 using Itinerario.Application;
 using Itinerario.Application.Interfaces;
 using Itinerario.Infrastructure;
+using Itinerario.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -41,5 +43,21 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.MapControllers();
+
+// Aplicar migraciones al arrancar (omitido en entorno de testing para permitir DbContext en memoria).
+if (!app.Environment.IsEnvironment("Testing"))
+{
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await dbContext.Database.MigrateAsync();
+    }
+    catch (Exception ex)
+    {
+        var logger = app.Services.GetRequiredService<ILogger<Program>>();
+        logger.LogWarning(ex, "No se pudo preparar la base de datos al arrancar (¿Postgres aún no iniciado?).");
+    }
+}
 
 app.Run();
