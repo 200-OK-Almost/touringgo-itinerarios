@@ -6,10 +6,12 @@ namespace Itinerario.API.Services;
 public class CurrentUser : ICurrentUser
 {
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IWebHostEnvironment _environment;
 
-    public CurrentUser(IHttpContextAccessor httpContextAccessor)
+    public CurrentUser(IHttpContextAccessor httpContextAccessor, IWebHostEnvironment environment)
     {
         _httpContextAccessor = httpContextAccessor;
+        _environment = environment;
     }
 
     public Guid UsuarioId
@@ -24,14 +26,17 @@ public class CurrentUser : ICurrentUser
                 return usuarioId;
             }
 
-            // Fallback de desarrollo hasta que el gateway/servicio Usuarios envie el JWT
-            var header = contexto?.Request.Headers["X-Usuario-Id"].ToString();
-            if (Guid.TryParse(header, out usuarioId))
+            // Fallback de desarrollo/testing hasta que el gateway/servicio Usuarios envíe el JWT.
+            if (_environment.IsDevelopment() || _environment.IsEnvironment("Testing"))
             {
-                return usuarioId;
+                var header = contexto?.Request.Headers["X-Usuario-Id"].ToString();
+                if (Guid.TryParse(header, out usuarioId))
+                {
+                    return usuarioId;
+                }
             }
 
-            throw new UnauthorizedAccessException("No se pudo identificar el usuario (claim sub o header X-Usuario-Id).");
+            throw new UnauthorizedAccessException("No se pudo identificar el usuario (claim sub).");
         }
     }
 }
