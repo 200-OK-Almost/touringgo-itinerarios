@@ -7,6 +7,9 @@ services:
       - "8083:8080"
     environment:
       ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=itinerarios_db;Username=postgres;Password=postgres"
+      Jwt__Key: ${JWT_KEY}
+      Jwt__Issuer: TouringGo.Usuarios
+      Jwt__Audience: TouringGo
     depends_on:
       - postgres
 
