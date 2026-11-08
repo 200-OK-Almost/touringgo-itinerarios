@@ -12,7 +12,7 @@ public interface IViajeRepository
     void Actualizar(Viaje viaje);
     void Eliminar(Viaje viaje);
     void AgregarMiembro(MiembroViaje miembro);
-    void SincronizarEtiquetas(Viaje viaje, IReadOnlyCollection<short> categoriaIds);
+    void SincronizarEtiquetas(Viaje viaje, IReadOnlyCollection<string> categoriaCodigos);
     void EstablecerParametrosFamilia(Viaje viaje, ParametrosFamilia? parametros);
     void Descartar(Viaje viaje);
     Task<int> GuardarCambiosAsync(CancellationToken cancellationToken = default);

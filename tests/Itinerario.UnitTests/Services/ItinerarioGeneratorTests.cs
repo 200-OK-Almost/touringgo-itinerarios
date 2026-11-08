@@ -186,7 +186,7 @@ public class ItinerarioGeneratorTests
                 longitudPartida),
             Guid.NewGuid(),
             "CODIGO1234",
-            new short[] { 1, 2 },
+            new[] { "cafe_especialidad", "museos_galerias" },
             null);
 
     private static LugarCandidatoDto CrearLugar(
@@ -197,7 +197,6 @@ public class ItinerarioGeneratorTests
             Nombre = "Lugar de prueba",
             Latitud = -34.58m,
             Longitud = -58.42m,
-            CategoriaId = 1,
             NivelPrecio = nivel,
             EsAireLibre = false,
             DuracionSugeridaMinutos = 60

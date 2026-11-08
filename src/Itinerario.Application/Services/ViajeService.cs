@@ -34,7 +34,7 @@ public class ViajeService : IViajeService
                 MapearDatos(dto),
                 creadoPorUsuarioId,
                 codigoInvitacion,
-                dto.CategoriaIds,
+                dto.CategoriaCodigos,
                 MapearParametrosFamilia(dto.ParametrosFamilia));
 
             try
@@ -92,7 +92,7 @@ public class ViajeService : IViajeService
         viaje.CambiarEstado(dto.Estado);
 
         _repository.Actualizar(viaje);
-        _repository.SincronizarEtiquetas(viaje, dto.CategoriaIds);
+        _repository.SincronizarEtiquetas(viaje, dto.CategoriaCodigos);
         _repository.EstablecerParametrosFamilia(viaje, MapearParametrosFamilia(dto.ParametrosFamilia));
         await _repository.GuardarCambiosAsync(cancellationToken);
 
@@ -228,7 +228,7 @@ public class ViajeService : IViajeService
         CreadoPorUsuarioId = viaje.CreadoPorUsuarioId,
         FechaCreacion = viaje.FechaCreacion,
         FechaActualizacion = viaje.FechaActualizacion,
-        CategoriaIds = viaje.Etiquetas.Select(e => e.CategoriaId).ToList(),
+        CategoriaCodigos = viaje.Etiquetas.Select(e => e.CategoriaCodigo).ToList(),
         ParametrosFamilia = viaje.ParametrosFamilia is null
             ? null
             : new ParametrosFamiliaDto

@@ -19,7 +19,7 @@ public class ViajeCreateDto
     public string? DireccionPartida { get; set; }
     public decimal? LatitudPartida { get; set; }
     public decimal? LongitudPartida { get; set; }
-    public IReadOnlyCollection<short> CategoriaIds { get; set; } = new List<short>();
+    public IReadOnlyCollection<string> CategoriaCodigos { get; set; } = new List<string>();
 
     public ParametrosFamiliaDto? ParametrosFamilia { get; set; }
 }

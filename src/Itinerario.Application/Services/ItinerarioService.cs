@@ -42,8 +42,8 @@ public class ItinerarioService : IItinerarioService
             throw new AccesoDenegadoException("Solo un administrador del viaje puede generar el itinerario.");
         }
 
-        var categoriaIds = viaje.Etiquetas.Select(e => e.CategoriaId).ToList();
-        var lugares = await _lugaresClient.BuscarAsync(viaje.Barrio, categoriaIds, cancellationToken);
+        var categoriaCodigos = viaje.Etiquetas.Select(e => e.CategoriaCodigo).ToList();
+        var lugares = await _lugaresClient.BuscarAsync(viaje.Barrio, categoriaCodigos, cancellationToken);
 
         var disponibles = lugares.ToList();
         var itinerarios = new List<ItinerarioEntity>();
@@ -186,8 +186,8 @@ public class ItinerarioService : IItinerarioService
 
     private Task<IReadOnlyCollection<LugarCandidatoDto>> BuscarLugaresAsync(Viaje viaje, CancellationToken cancellationToken)
     {
-        var categoriaIds = viaje.Etiquetas.Select(e => e.CategoriaId).ToList();
-        return _lugaresClient.BuscarAsync(viaje.Barrio, categoriaIds, cancellationToken);
+        var categoriaCodigos = viaje.Etiquetas.Select(e => e.CategoriaCodigo).ToList();
+        return _lugaresClient.BuscarAsync(viaje.Barrio, categoriaCodigos, cancellationToken);
     }
 
     private static IReadOnlyDictionary<Guid, LugarCandidatoDto> ConstruirLugaresActuales(

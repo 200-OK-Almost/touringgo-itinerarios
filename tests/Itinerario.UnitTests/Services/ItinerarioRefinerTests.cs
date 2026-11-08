@@ -270,7 +270,7 @@ public class ItinerarioRefinerTests
                 0m),
             Guid.NewGuid(),
             "CODIGO1234",
-            new short[] { 1, 2 },
+            new[] { "cafe_especialidad", "museos_galerias" },
             null);
 
     private static ItinerarioEntity CrearItinerario(
@@ -323,7 +323,6 @@ public class ItinerarioRefinerTests
             Nombre = "Lugar",
             Latitud = latitud,
             Longitud = longitud,
-            CategoriaId = 1,
             NivelPrecio = precio,
             EsAireLibre = aireLibre,
             DuracionSugeridaMinutos = duracionMinutos

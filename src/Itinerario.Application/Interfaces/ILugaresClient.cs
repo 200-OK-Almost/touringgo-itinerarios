@@ -9,6 +9,6 @@ public interface ILugaresClient
 
     Task<IReadOnlyCollection<LugarCandidatoDto>> BuscarAsync(
         BarrioCaba barrio,
-        IReadOnlyCollection<short> categoriaIds,
+        IReadOnlyCollection<string> categoriaCodigos,
         CancellationToken cancellationToken = default);
 }

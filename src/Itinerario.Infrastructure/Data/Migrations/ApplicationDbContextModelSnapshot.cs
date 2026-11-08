@@ -17,7 +17,7 @@ namespace Itinerario.Infrastructure.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.32")
+                .HasAnnotation("ProductVersion", "8.0.33")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -28,11 +28,11 @@ namespace Itinerario.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("viaje_id");
 
-                    b.Property<short>("CategoriaId")
-                        .HasColumnType("smallint")
-                        .HasColumnName("categoria_id");
+                    b.Property<string>("CategoriaCodigo")
+                        .HasColumnType("text")
+                        .HasColumnName("categoria_codigo");
 
-                    b.HasKey("ViajeId", "CategoriaId");
+                    b.HasKey("ViajeId", "CategoriaCodigo");
 
                     b.ToTable("etiquetas_viaje", (string)null);
                 });

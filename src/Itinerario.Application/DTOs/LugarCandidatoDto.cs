@@ -8,7 +8,6 @@ public class LugarCandidatoDto
     public string Nombre { get; set; } = string.Empty;
     public decimal Latitud { get; set; }
     public decimal Longitud { get; set; }
-    public short CategoriaId { get; set; }
     public NivelPresupuesto NivelPrecio { get; set; }
     public bool EsAireLibre { get; set; }
     public short DuracionSugeridaMinutos { get; set; }

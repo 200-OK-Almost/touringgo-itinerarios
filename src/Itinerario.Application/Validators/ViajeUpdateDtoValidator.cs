@@ -45,9 +45,13 @@ public class ViajeUpdateDtoValidator : AbstractValidator<ViajeUpdateDto>
             .When(v => v.FechaInicio.HasValue && v.FechaFin.HasValue)
             .WithMessage("FechaFin no puede ser anterior a FechaInicio.");
 
-        RuleFor(v => v.CategoriaIds)
+        RuleFor(v => v.CategoriaCodigos)
             .Must(c => c is { Count: >= 2 and <= 4 })
             .WithMessage("Debe elegir entre 2 y 4 etiquetas.");
+
+        RuleFor(v => v.CategoriaCodigos)
+            .Must(c => c.All(x => !string.IsNullOrWhiteSpace(x)))
+            .WithMessage("Los códigos de categoría no pueden estar vacíos.");
 
         RuleFor(v => v.ParametrosFamilia)
             .Null()
