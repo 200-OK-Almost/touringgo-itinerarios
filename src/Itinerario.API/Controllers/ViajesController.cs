@@ -1,11 +1,13 @@
 using Itinerario.Application.DTOs;
 using Itinerario.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Itinerario.API.Controllers;
 
 [ApiController]
 [Route("api/viajes")]
+[Authorize]
 public class ViajesController : ControllerBase
 {
     private readonly IViajeService _service;
