@@ -8,11 +8,11 @@ public class LugaresClient : ILugaresClient
 {
     private static readonly IReadOnlyList<LugarStub> Lugares = new List<LugarStub>
     {
-        new(Guid.Parse("11111111-1111-1111-1111-111111111101"), "Plaza Serrano", BarrioCaba.Palermo, -34.5883m, -58.4306m, Turno.Manana, 1, NivelPresupuesto.Economico, true, 45),
-        new(Guid.Parse("11111111-1111-1111-1111-111111111102"), "MALBA", BarrioCaba.Palermo, -34.5772m, -58.4028m, Turno.Tarde, 2, NivelPresupuesto.Equilibrado, false, 90),
-        new(Guid.Parse("11111111-1111-1111-1111-111111111103"), "Café de Recoleta", BarrioCaba.Recoleta, -34.5889m, -58.3934m, Turno.Manana, 3, NivelPresupuesto.Economico, false, 60),
-        new(Guid.Parse("11111111-1111-1111-1111-111111111104"), "Feria de San Telmo", BarrioCaba.SanTelmo, -34.6215m, -58.3733m, Turno.Tarde, 1, NivelPresupuesto.Economico, true, 60),
-        new(Guid.Parse("11111111-1111-1111-1111-111111111105"), "Cena en Puerto Madero", BarrioCaba.PuertoMadero, -34.6118m, -58.3630m, Turno.Noche, 4, NivelPresupuesto.SinRestricciones, true, 120)
+        new(Guid.Parse("11111111-1111-1111-1111-111111111101"), "Plaza Serrano", BarrioCaba.Palermo, -34.5883m, -58.4306m, 1, NivelPresupuesto.Economico, true, 45),
+        new(Guid.Parse("11111111-1111-1111-1111-111111111102"), "MALBA", BarrioCaba.Palermo, -34.5772m, -58.4028m, 2, NivelPresupuesto.Equilibrado, false, 90),
+        new(Guid.Parse("11111111-1111-1111-1111-111111111103"), "Café de Recoleta", BarrioCaba.Recoleta, -34.5889m, -58.3934m, 3, NivelPresupuesto.Economico, false, 60),
+        new(Guid.Parse("11111111-1111-1111-1111-111111111104"), "Feria de San Telmo", BarrioCaba.SanTelmo, -34.6215m, -58.3733m, 1, NivelPresupuesto.Economico, true, 60),
+        new(Guid.Parse("11111111-1111-1111-1111-111111111105"), "Cena en Puerto Madero", BarrioCaba.PuertoMadero, -34.6118m, -58.3630m, 4, NivelPresupuesto.SinRestricciones, true, 120)
     };
 
     public Task<LugarCandidatoDto?> ObtenerPorIdAsync(Guid lugarId, CancellationToken cancellationToken = default)
@@ -42,7 +42,6 @@ public class LugaresClient : ILugaresClient
         Nombre = lugar.Nombre,
         Latitud = lugar.Latitud,
         Longitud = lugar.Longitud,
-        Turno = lugar.Turno,
         CategoriaId = lugar.CategoriaId,
         NivelPrecio = lugar.NivelPrecio,
         EsAireLibre = lugar.EsAireLibre,
@@ -55,7 +54,6 @@ public class LugaresClient : ILugaresClient
         BarrioCaba Barrio,
         decimal Latitud,
         decimal Longitud,
-        Turno Turno,
         short CategoriaId,
         NivelPresupuesto NivelPrecio,
         bool EsAireLibre,

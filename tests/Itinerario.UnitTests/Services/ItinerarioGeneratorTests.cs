@@ -14,10 +14,10 @@ public class ItinerarioGeneratorTests
         var viaje = CrearViaje(AlcanceTemporal.DiaCompleto);
         var lugares = new[]
         {
-            CrearLugar(Turno.Manana),
-            CrearLugar(Turno.Manana),
-            CrearLugar(Turno.Manana),
-            CrearLugar(Turno.Manana)
+            CrearLugar(),
+            CrearLugar(),
+            CrearLugar(),
+            CrearLugar()
         };
 
         var paradas = CrearGenerator().Generar(viaje, lugares);
@@ -31,10 +31,10 @@ public class ItinerarioGeneratorTests
         var viaje = CrearViaje(AlcanceTemporal.TardeNoche);
         var lugares = new[]
         {
-            CrearLugar(Turno.Tarde),
-            CrearLugar(Turno.Tarde),
-            CrearLugar(Turno.Tarde),
-            CrearLugar(Turno.Tarde)
+            CrearLugar(),
+            CrearLugar(),
+            CrearLugar(),
+            CrearLugar()
         };
 
         var paradas = CrearGenerator().Generar(viaje, lugares);
@@ -43,20 +43,22 @@ public class ItinerarioGeneratorTests
     }
 
     [Fact]
-    public void Generar_ExcluyeLugaresFueraDelAlcanceTemporal()
+    public void Generar_AsignaTurnoPorOrdenDelRecorrido()
     {
-        var viaje = CrearViaje(AlcanceTemporal.MananaAlmuerzo);
+        var viaje = CrearViaje(AlcanceTemporal.DiaCompleto);
         var lugares = new[]
         {
-            CrearLugar(Turno.Manana),
-            CrearLugar(Turno.Noche),
-            CrearLugar(Turno.Noche)
+            CrearLugar(),
+            CrearLugar(),
+            CrearLugar()
         };
 
-        var paradas = CrearGenerator().Generar(viaje, lugares);
+        var paradas = CrearGenerator().Generar(viaje, lugares).ToList();
 
-        var unica = Assert.Single(paradas);
-        Assert.Equal(Turno.Manana, unica.Turno);
+        Assert.Equal(3, paradas.Count);
+        Assert.Equal(Turno.Manana, paradas[0].Turno);
+        Assert.Equal(Turno.Tarde, paradas[1].Turno);
+        Assert.Equal(Turno.Noche, paradas[2].Turno);
     }
 
     [Fact]
@@ -65,9 +67,9 @@ public class ItinerarioGeneratorTests
         var viaje = CrearViaje(presupuesto: NivelPresupuesto.Economico);
         var lugares = new[]
         {
-            CrearLugar(Turno.Manana, NivelPresupuesto.Economico),
-            CrearLugar(Turno.Manana, NivelPresupuesto.Equilibrado),
-            CrearLugar(Turno.Manana, NivelPresupuesto.SinRestricciones)
+            CrearLugar(NivelPresupuesto.Economico),
+            CrearLugar(NivelPresupuesto.Equilibrado),
+            CrearLugar(NivelPresupuesto.SinRestricciones)
         };
 
         var paradas = CrearGenerator().Generar(viaje, lugares);
@@ -85,8 +87,8 @@ public class ItinerarioGeneratorTests
             longitudPartida: -58.42m);
         var lugares = new[]
         {
-            CrearLugar(Turno.Tarde),
-            CrearLugar(Turno.Tarde)
+            CrearLugar(),
+            CrearLugar()
         };
 
         var paradas = CrearGenerator(metrosEntreLugares: 500).Generar(viaje, lugares);
@@ -103,8 +105,8 @@ public class ItinerarioGeneratorTests
             longitudPartida: -58.42m);
         var lugares = new[]
         {
-            CrearLugar(Turno.Tarde),
-            CrearLugar(Turno.Tarde)
+            CrearLugar(),
+            CrearLugar()
         };
 
         var paradas = CrearGenerator(metrosEntreLugares: 500).Generar(viaje, lugares);
@@ -128,8 +130,8 @@ public class ItinerarioGeneratorTests
         var viaje = CrearViaje();
         var lugares = new[]
         {
-            CrearLugar(Turno.Manana),
-            CrearLugar(Turno.Tarde)
+            CrearLugar(),
+            CrearLugar()
         };
 
         var paradas = CrearGenerator().Generar(viaje, lugares);
@@ -143,10 +145,10 @@ public class ItinerarioGeneratorTests
         var viaje = CrearViaje();
         var lugares = new[]
         {
-            CrearLugar(Turno.Manana),
-            CrearLugar(Turno.Tarde),
-            CrearLugar(Turno.Noche),
-            CrearLugar(Turno.Manana)
+            CrearLugar(),
+            CrearLugar(),
+            CrearLugar(),
+            CrearLugar()
         };
 
         var paradas = CrearGenerator().Generar(viaje, lugares);
@@ -188,7 +190,6 @@ public class ItinerarioGeneratorTests
             null);
 
     private static LugarCandidatoDto CrearLugar(
-        Turno turno,
         NivelPresupuesto nivel = NivelPresupuesto.Economico)
         => new()
         {
@@ -196,7 +197,6 @@ public class ItinerarioGeneratorTests
             Nombre = "Lugar de prueba",
             Latitud = -34.58m,
             Longitud = -58.42m,
-            Turno = turno,
             CategoriaId = 1,
             NivelPrecio = nivel,
             EsAireLibre = false,

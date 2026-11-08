@@ -20,6 +20,7 @@ public class ItinerarioGenerator : IItinerarioGenerator
     }
 
     // Selección greedy (vecino más cercano): no garantiza el recorrido total óptimo.
+    // El turno se asigna por orden en el recorrido, no por el turno del lugar (limitación v1).
     public IReadOnlyCollection<ParadaItinerario> Generar(
         Viaje viaje,
         IReadOnlyCollection<LugarCandidatoDto> lugares)
@@ -28,7 +29,6 @@ public class ItinerarioGenerator : IItinerarioGenerator
 
         var disponibles = lugares
             .Where(l => DentroDePresupuesto(l.NivelPrecio, viaje.NivelPresupuesto))
-            .Where(l => turnos.Contains(l.Turno))
             .ToList();
 
         if (disponibles.Count == 0)
@@ -52,11 +52,11 @@ public class ItinerarioGenerator : IItinerarioGenerator
 
         for (var i = 0; i < objetivo; i++)
         {
-            var turnoPreferido = turnos[i % turnos.Count];
+            var turnoAsignado = turnos[i % turnos.Count];
 
             var seleccion = latAnterior.HasValue && lonAnterior.HasValue
-                ? ElegirMasCercano(disponibles, turnoPreferido, latAnterior.Value, lonAnterior.Value, limiteCuadras)
-                : ElegirSemilla(disponibles, turnoPreferido);
+                ? ElegirDelConjunto(disponibles, latAnterior.Value, lonAnterior.Value, limiteCuadras)
+                : ElegirSemilla(disponibles);
 
             if (seleccion is null)
             {
@@ -66,29 +66,29 @@ public class ItinerarioGenerator : IItinerarioGenerator
             var candidato = seleccion.Lugar;
             disponibles.Remove(candidato);
 
-            var orden = ordenPorTurno.TryGetValue(candidato.Turno, out var ordenActual)
+            var orden = ordenPorTurno.TryGetValue(turnoAsignado, out var ordenActual)
                 ? (short)(ordenActual + 1)
                 : (short)1;
-            ordenPorTurno[candidato.Turno] = orden;
+            ordenPorTurno[turnoAsignado] = orden;
 
-            var minutoActual = minutoPorTurno.TryGetValue(candidato.Turno, out var acumulado)
+            var minutoActual = minutoPorTurno.TryGetValue(turnoAsignado, out var acumulado)
                 ? acumulado
-                : HoraBaseMinutos(candidato.Turno);
+                : HoraBaseMinutos(turnoAsignado);
 
-            if (turnoAnterior == candidato.Turno && seleccion.MinutosAPie is not null)
+            if (turnoAnterior == turnoAsignado && seleccion.MinutosAPie is not null)
             {
                 minutoActual += seleccion.MinutosAPie.Value;
             }
 
             var horaInicio = MinutosAHora(minutoActual);
-            minutoPorTurno[candidato.Turno] = minutoActual + candidato.DuracionSugeridaMinutos + DescansoMinutos;
+            minutoPorTurno[turnoAsignado] = minutoActual + candidato.DuracionSugeridaMinutos + DescansoMinutos;
 
             paradas.Add(new ParadaItinerario
             {
                 Id = Guid.NewGuid(),
                 ItinerarioId = Guid.Empty,
                 LugarId = candidato.Id,
-                Turno = candidato.Turno,
+                Turno = turnoAsignado,
                 OrdenParada = orden,
                 HoraInicio = horaInicio,
                 DuracionMinutos = candidato.DuracionSugeridaMinutos,
@@ -101,24 +101,11 @@ public class ItinerarioGenerator : IItinerarioGenerator
 
             latAnterior = (double)candidato.Latitud;
             lonAnterior = (double)candidato.Longitud;
-            turnoAnterior = candidato.Turno;
+            turnoAnterior = turnoAsignado;
         }
 
         return paradas;
     }
-
-    private Aproximacion? ElegirMasCercano(
-        IReadOnlyList<LugarCandidatoDto> candidatos,
-        Turno turnoPreferido,
-        double latReferencia,
-        double lonReferencia,
-        short limiteCuadras)
-        => ElegirDelConjunto(
-                candidatos.Where(c => c.Turno == turnoPreferido),
-                latReferencia,
-                lonReferencia,
-                limiteCuadras)
-            ?? ElegirDelConjunto(candidatos, latReferencia, lonReferencia, limiteCuadras);
 
     private Aproximacion? ElegirDelConjunto(
         IEnumerable<LugarCandidatoDto> candidatos,
@@ -140,14 +127,11 @@ public class ItinerarioGenerator : IItinerarioGenerator
             .FirstOrDefault();
 
     private static Aproximacion? ElegirSemilla(
-        IReadOnlyList<LugarCandidatoDto> candidatos,
-        Turno turnoPreferido)
+        IReadOnlyList<LugarCandidatoDto> candidatos)
     {
         var elegido = candidatos
-            .Where(c => c.Turno == turnoPreferido)
             .OrderBy(c => c.Id)
-            .FirstOrDefault()
-            ?? candidatos.OrderBy(c => c.Id).FirstOrDefault();
+            .FirstOrDefault();
 
         return elegido is null ? null : new Aproximacion(elegido, null, null, null);
     }
