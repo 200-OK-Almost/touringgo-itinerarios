@@ -10,7 +10,7 @@ Contexto para trabajar con opencode en `turinggo-itinerarios`. Asistente de plan
   - `Itinerario.Application` → `DTOs/`, `Interfaces/`, `Services/`, `Validators/` (FluentValidation) y `ResultadoPaginado<T>`; registro en `DependencyInjection.AddApplication`.
   - `Itinerario.Domain` → `Entities/` (incl. `DatosViaje`), `Enums/`, `Exceptions/` (sin dependencias).
   - `Itinerario.Infrastructure` → `Data/ApplicationDbContext.cs`, `Data/Configurations/` (`IEntityTypeConfiguration`), `Repositories/`, `Clients/`, `Data/Migrations/`; registro en `DependencyInjection.AddInfrastructure`.
-  - `tests/Itinerario.UnitTests` → xUnit, referencia a `Itinerario.Application`.
+  - `tests/Itinerario.UnitTests` → xUnit, referencia a `Itinerario.Application` e `Itinerario.Infrastructure`.
 - Dirección de dependencias: `API → Application + Infrastructure`; `Infrastructure → Application + Domain`; `Application → Domain`.
 - Base de datos: `itinerarios_db` (database-per-service).
 - Endpoints: `POST /api/viajes`, `GET /api/viajes?pagina&tamano`, `GET /api/viajes/{id}`, `PUT /api/viajes/{id}`, `DELETE /api/viajes/{id}`, `POST /api/viajes/unirse`, `POST /api/viajes/{id}/itinerario`, `GET /api/viajes/{id}/itinerario`, `POST /api/viajes/{id}/refinar`, `POST /api/viajes/{id}/sugerencias-turnos-libres`.
@@ -18,7 +18,7 @@ Contexto para trabajar con opencode en `turinggo-itinerarios`. Asistente de plan
 ## Reglas de oro (microservicios)
 
 1. **Nunca FK ni navegación hacia tablas de otro servicio.** Solo se guarda el id (`Guid` / `short`).
-2. **Nada de `JOIN`/`Include()` entre servicios.** Datos externos solo por REST (`Infrastructure/Clients/`, hoy `LugaresClient` es un stub sin HTTP).
+2. **Nada de `JOIN`/`Include()` entre servicios.** Datos externos solo por REST (`Infrastructure/Clients/`). `LugaresClient` consume el catálogo de Lugares por HTTP (tipado con `AddHttpClient` + resiliencia).
 3. No tocar la base ni el código de otro repo.
 4. Nunca commitear secretos reales (`.env` está ignorado).
 
@@ -43,14 +43,14 @@ dotnet ef database update --project src/Itinerario.Infrastructure --startup-proj
 
 - El comando `dotnet ef` requiere la herramienta global `dotnet-ef` (8.x): `dotnet tool install --global dotnet-ef --version "8.*"`. No viene con el build.
 - La entidad `Itinerario` **colisiona con el namespace raíz** `Itinerario`: donde se la referencia (Infrastructure/Application) hay que usar alias o nombre completo (p. ej. `using ItinerarioEntity = Itinerario.Domain.Entities.Itinerario;`), como en `ApplicationDbContext`.
-- **Identidad sin JWT**: `ICurrentUser` (`API/Services/CurrentUser`) lee el claim `sub`; si no hay, cae al header **`X-Usuario-Id`** (dev); si tampoco, 401. Reemplazar el fallback cuando exista Usuarios. Los endpoints que crean/modifican requieren usuario.
+- **Identidad JWT**: `AddJwtBearer` valida el token emitido por Usuarios (Issuer `TouringGo.Usuarios`, Audience `TouringGo`, HS256) con `MapInboundClaims = false`; acepta el token por header `Authorization` o cookie `access_token`. `ICurrentUser` lee `sub`; el header **`X-Usuario-Id`** queda como fallback solo en `Development`/`Testing`. `Jwt:Key` va por entorno/user-secrets (misma clave que Usuarios), nunca en `appsettings.json`. Todos los `/api/viajes` requieren `[Authorize]`.
 - **Enums en JSON**: `System.Text.Json` no acepta nombres de enum por defecto; se agregó `JsonStringEnumConverter` en `AddJsonOptions`, así que el contrato usa textos (`"Solo"`, `"Palermo"`).
 - **Auto-validado**: el `ValidationFilter` global resuelve `IValidator<T>` de DI y devuelve **400** con `ModelState`; los validadores viven en `Application/Validators/` y se registran con `AddValidatorsFromAssembly`.
-- La API **no aplica migraciones al arrancar**; correr `dotnet ef database update` a mano. Migraciones: `InitialCreate` (6 tablas, enums `text`) y `ViajeXminConcurrencyToken` (**sin DDL**: `xmin` es columna de sistema, solo sincroniza el snapshot).
+- La API **aplica migraciones al arrancar** (`MigrateAsync`, omitido en entorno `Testing`). Migraciones: `InitialCreate` (6 tablas, enums `text`), `ViajeXminConcurrencyToken` (**sin DDL**: `xmin` es columna de sistema, solo sincroniza el snapshot) y `EtiquetasPorCodigo` (clave de etiquetas `short` → `categoria_codigo` string; **destructiva**, recrear la DB).
 - **Concurrencia**: `Viaje` usa `xmin` como rowversion; `DbUpdateConcurrencyException` → `ConflictoDeConcurrenciaException` → **409**. Difícil de reproducir con requests secuenciales.
 - **Código de invitación**: el repo traduce la violación Postgres **23505** del constraint `IX_viajes_codigo_invitacion` y `ViajeService.CrearAsync` reintenta la generación.
 - Los enums se persisten como `text`. Ver `docs/modelo-datos.md` para el DER completo (tablas, índices, enums, referencias externas).
-- **Actualización de hijos**: `ViajeRepository.Actualizar` NO debe usar `Update(viaje)` en cascada ni reemplazar colecciones/trackear instancias nuevas con la misma clave (los hijos tienen claves ya seteadas → EF los marca `Modified` en vez de `Added/Deleted`, o lanza *identity conflict*). Los hijos se sincronizan mutando la colección trackeada: `AgregarMiembro`, `SincronizarEtiquetas` y `EstablecerParametrosFamilia` marcan `Add`/`Remove` explícitos; `Viaje.ActualizarDatos` solo toca escalares.
+- **Actualización de hijos**: `ViajeRepository.Actualizar` NO debe usar `Update(viaje)` en cascada ni reemplazar colecciones/trackear instancias nuevas con la misma clave (los hijos tienen claves ya seteadas → EF los marca `Modified` en vez de `Added/Deleted`, o lanza _identity conflict_). Los hijos se sincronizan mutando la colección trackeada: `AgregarMiembro`, `SincronizarEtiquetas` y `EstablecerParametrosFamilia` marcan `Add`/`Remove` explícitos; `Viaje.ActualizarDatos` solo toca escalares.
 - **Generación de itinerario**: `ItinerarioService.GenerarAsync` arma 1 `Itinerario` por día (rango `FechaInicio..FechaFin`; 1 si faltan fechas). Genera día por día con un pool de lugares que se achica; si se agota, los días siguientes quedan con 0 paradas. v1: el origen no se recalcula al último lugar del día anterior. `ItinerarioRepository.ReemplazarAsync` reemplaza los itinerarios previos en una transacción con **dos** `SaveChanges` (borrar, luego insertar) para no violar el UNIQUE `(viaje_id, numero_dia)`; el viaje y los itinerarios se guardan juntos porque comparten el `DbContext` scoped.
 - `GeoCalculator`, `ItinerarioGenerator` y `Viaje` (dominio) son clases puras/testeables, sin acceso a DB ni HTTP.
 - Connection string local: `Host=localhost;Port=5432;Database=itinerarios_db;Username=postgres;Password=postgres` (`docker compose` expone postgres en 5432).
@@ -68,6 +68,13 @@ Fase 5 (generación de itinerario end-to-end): `ItinerarioService` + `Itinerario
 
 Fase 6 (refinamientos y sugerencias de turno libre): `ItinerarioRefiner` puro con swaps puntuales (`MasEconomico`, `ReducirCaminata`, `MasAireLibre`), endpoints `POST /api/viajes/{id}/refinar` y `POST /api/viajes/{id}/sugerencias-turnos-libres`, persistencia atómica con `GuardarCambiosAsync`/`AgregarParada`, sugerencias con `OrigenParada = SugerenciaHueco`, validación de `numeroDia` → 400 y 10 tests nuevos.
 
-Pendiente: integración real con Usuarios/Lugares por REST (reemplazar `LugaresClient` stub), JWT real (reemplazar `X-Usuario-Id`) y Gemini (`sugerencia_ia`).
+(integración real): JWT (Issuer/Audience/`Jwt:Key`, cookie `access_token`), `[Authorize]` en `ViajesController`, `X-Usuario-Id` solo dev/testing, migraciones al arrancar, `LugaresClient` por HTTP (`GET /api/lugares` con `barrio` + `categoriaCodigo` OR, loop de páginas con tope, resiliencia y `ServicioExternoNoDisponibleException` → 503), **turno por orden** (ya no viene del catálogo), **categorías por `codigo`** (`EtiquetaViaje.CategoriaCodigo` string; DTOs `CategoriaCodigos`), y tests de `LugaresClient` (38 en total).
+
+Pendiente: consumo del perfil de Usuarios (diferido a 7c), Gemini (`sugerencia_ia`, NL→parámetros, reordenar/personalizar) y documentación de Infra (`.env.example`).
+
+Limitaciones conocidas:
+
+- **Turno por orden**: el turno se asigna por posición (1ª=Manana, 2ª=Tarde, …), no por horario real del lugar; un lugar puede quedar en un turno en el que no abre. A resolver con horarios de apertura.
+- **CSRF**: el JWT también llega por cookie `access_token` (HttpOnly, `SameSite=Lax`); los endpoints que mutan no validan token anti-forgery (mitigado por SameSite + gateway same-site).
 
 Antes de dar una tarea por terminada: `dotnet build Itinerario.sln` sin errores y `dotnet test` en verde.

@@ -37,9 +37,9 @@ public class ItinerarioRefiner : IItinerarioRefiner
             var referencia = ReferenciaPara(parada, paradas, itinerario, viaje, lugaresActuales);
             var reemplazo = tipo switch
             {
-                TipoRefinamiento.MasEconomico => ElegirMasEconomico(parada, actual, candidatos),
-                TipoRefinamiento.ReducirCaminata => ElegirMasCercano(parada, actual, candidatos, referencia),
-                TipoRefinamiento.MasAireLibre => ElegirAireLibre(parada, actual, candidatos, referencia),
+                TipoRefinamiento.MasEconomico => ElegirMasEconomico(actual, candidatos),
+                TipoRefinamiento.ReducirCaminata => ElegirMasCercano(actual, candidatos, referencia),
+                TipoRefinamiento.MasAireLibre => ElegirAireLibre(actual, candidatos, referencia),
                 _ => null
             };
 
@@ -72,7 +72,6 @@ public class ItinerarioRefiner : IItinerarioRefiner
             }
 
             var candidato = candidatos
-                .Where(c => c.Turno == turno)
                 .Where(c => DentroDePresupuesto(c.NivelPrecio, viaje.NivelPresupuesto))
                 .OrderBy(c => c.NivelPrecio)
                 .ThenBy(c => c.Id)
@@ -84,25 +83,22 @@ public class ItinerarioRefiner : IItinerarioRefiner
             }
 
             candidatos.Remove(candidato);
-            sugerencias.Add(CrearSugerencia(itinerario, candidato));
+            sugerencias.Add(CrearSugerencia(itinerario, turno, candidato));
         }
 
         return sugerencias;
     }
 
     private LugarCandidatoDto? ElegirMasEconomico(
-        ParadaItinerario parada,
         LugarCandidatoDto actual,
         ICollection<LugarCandidatoDto> candidatos)
         => candidatos
-            .Where(c => c.Turno == parada.Turno)
             .Where(c => c.NivelPrecio < actual.NivelPrecio)
             .OrderBy(c => c.NivelPrecio)
             .ThenBy(c => c.Id)
             .FirstOrDefault();
 
     private LugarCandidatoDto? ElegirMasCercano(
-        ParadaItinerario parada,
         LugarCandidatoDto actual,
         ICollection<LugarCandidatoDto> candidatos,
         (double lat, double lon)? referencia)
@@ -115,7 +111,6 @@ public class ItinerarioRefiner : IItinerarioRefiner
         var distanciaActual = Distancia(actual, referencia.Value);
 
         return candidatos
-            .Where(c => c.Turno == parada.Turno)
             .Select(c => new { Candidato = c, Distancia = Distancia(c, referencia.Value) })
             .Where(x => x.Distancia < distanciaActual)
             .OrderBy(x => x.Distancia)
@@ -125,7 +120,6 @@ public class ItinerarioRefiner : IItinerarioRefiner
     }
 
     private LugarCandidatoDto? ElegirAireLibre(
-        ParadaItinerario parada,
         LugarCandidatoDto actual,
         ICollection<LugarCandidatoDto> candidatos,
         (double lat, double lon)? referencia)
@@ -136,7 +130,7 @@ public class ItinerarioRefiner : IItinerarioRefiner
         }
 
         var aireLibre = candidatos
-            .Where(c => c.Turno == parada.Turno && c.EsAireLibre)
+            .Where(c => c.EsAireLibre)
             .ToList();
 
         if (aireLibre.Count == 0)
@@ -177,13 +171,13 @@ public class ItinerarioRefiner : IItinerarioRefiner
         // v1: no recalcula HoraInicio.
     }
 
-    private static ParadaItinerario CrearSugerencia(ItinerarioEntity itinerario, LugarCandidatoDto candidato)
+    private static ParadaItinerario CrearSugerencia(ItinerarioEntity itinerario, Turno turno, LugarCandidatoDto candidato)
         => new()
         {
             Id = Guid.NewGuid(),
             ItinerarioId = itinerario.Id,
             LugarId = candidato.Id,
-            Turno = candidato.Turno,
+            Turno = turno,
             OrdenParada = 1,
             DuracionMinutos = candidato.DuracionSugeridaMinutos,
             OrigenParada = OrigenParada.SugerenciaHueco,

@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Itinerario.Application\Itinerario.Application.csproj" />
+    <ProjectReference Include="..\..\src\Itinerario.Infrastructure\Itinerario.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

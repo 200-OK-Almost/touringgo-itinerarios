@@ -37,7 +37,7 @@ public class Viaje
         DatosViaje datos,
         Guid creadoPorUsuarioId,
         string codigoInvitacion,
-        IEnumerable<short> categoriaIds,
+        IEnumerable<string> categoriaCodigos,
         ParametrosFamilia? parametros)
     {
         var viaje = new Viaje
@@ -51,9 +51,9 @@ public class Viaje
 
         viaje.ActualizarDatos(datos);
 
-        foreach (var categoriaId in categoriaIds)
+        foreach (var categoriaCodigo in categoriaCodigos)
         {
-            viaje.Etiquetas.Add(new EtiquetaViaje { ViajeId = id, CategoriaId = categoriaId });
+            viaje.Etiquetas.Add(new EtiquetaViaje { ViajeId = id, CategoriaCodigo = categoriaCodigo });
         }
 
         if (parametros is not null)

@@ -10,13 +10,13 @@ public class EtiquetaViajeConfiguration : IEntityTypeConfiguration<EtiquetaViaje
     {
         builder.ToTable("etiquetas_viaje");
 
-        builder.HasKey(e => new { e.ViajeId, e.CategoriaId });
+        builder.HasKey(e => new { e.ViajeId, e.CategoriaCodigo });
 
         builder.Property(e => e.ViajeId)
             .HasColumnName("viaje_id");
 
-        builder.Property(e => e.CategoriaId)
-            .HasColumnName("categoria_id");
+        builder.Property(e => e.CategoriaCodigo)
+            .HasColumnName("categoria_codigo");
 
         builder.HasOne(e => e.Viaje)
             .WithMany(v => v.Etiquetas)

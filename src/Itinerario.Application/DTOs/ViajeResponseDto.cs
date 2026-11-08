@@ -25,6 +25,6 @@ public class ViajeResponseDto
     public Guid CreadoPorUsuarioId { get; set; }
     public DateTimeOffset FechaCreacion { get; set; }
     public DateTimeOffset FechaActualizacion { get; set; }
-    public IReadOnlyCollection<short> CategoriaIds { get; set; } = new List<short>();
+    public IReadOnlyCollection<string> CategoriaCodigos { get; set; } = new List<string>();
     public ParametrosFamiliaDto? ParametrosFamilia { get; set; }
 }

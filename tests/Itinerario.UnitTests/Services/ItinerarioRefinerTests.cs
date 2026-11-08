@@ -21,12 +21,12 @@ public class ItinerarioRefinerTests
         itinerario.Paradas.Add(CrearParada(actualId, Turno.Manana));
 
         var lugaresActuales = LugaresPorId(
-            CrearLugar(id: actualId, turno: Turno.Manana, precio: NivelPresupuesto.SinRestricciones));
+            CrearLugar(id: actualId, precio: NivelPresupuesto.SinRestricciones));
 
         var disponibles = new List<LugarCandidatoDto>
         {
-            CrearLugar(id: equilibradoId, turno: Turno.Manana, precio: NivelPresupuesto.Equilibrado),
-            CrearLugar(id: baratoId, turno: Turno.Manana, precio: NivelPresupuesto.Economico)
+            CrearLugar(id: equilibradoId, precio: NivelPresupuesto.Equilibrado),
+            CrearLugar(id: baratoId, precio: NivelPresupuesto.Economico)
         };
 
         refiner.Refinar(TipoRefinamiento.MasEconomico, itinerario, lugaresActuales, disponibles, viaje);
@@ -47,11 +47,11 @@ public class ItinerarioRefinerTests
         itinerario.Paradas.Add(CrearParada(actualId, Turno.Manana));
 
         var lugaresActuales = LugaresPorId(
-            CrearLugar(id: actualId, turno: Turno.Manana, precio: NivelPresupuesto.Economico));
+            CrearLugar(id: actualId, precio: NivelPresupuesto.Economico));
 
         var disponibles = new List<LugarCandidatoDto>
         {
-            CrearLugar(turno: Turno.Manana, precio: NivelPresupuesto.Equilibrado)
+            CrearLugar(precio: NivelPresupuesto.Equilibrado)
         };
 
         refiner.Refinar(TipoRefinamiento.MasEconomico, itinerario, lugaresActuales, disponibles, viaje);
@@ -71,11 +71,11 @@ public class ItinerarioRefinerTests
         itinerario.Paradas.Add(CrearParada(actualId, Turno.Manana));
 
         var lugaresActuales = LugaresPorId(
-            CrearLugar(id: actualId, turno: Turno.Manana, latitud: 0.01m, longitud: 0m));
+            CrearLugar(id: actualId, latitud: 0.01m, longitud: 0m));
 
         var disponibles = new List<LugarCandidatoDto>
         {
-            CrearLugar(id: cercanoId, turno: Turno.Manana, latitud: 0.005m, longitud: 0m)
+            CrearLugar(id: cercanoId, latitud: 0.005m, longitud: 0m)
         };
 
         refiner.Refinar(TipoRefinamiento.ReducirCaminata, itinerario, lugaresActuales, disponibles, viaje);
@@ -95,11 +95,11 @@ public class ItinerarioRefinerTests
         itinerario.Paradas.Add(CrearParada(actualId, Turno.Manana));
 
         var lugaresActuales = LugaresPorId(
-            CrearLugar(id: actualId, turno: Turno.Manana, latitud: 0.001m, longitud: 0m));
+            CrearLugar(id: actualId, latitud: 0.001m, longitud: 0m));
 
         var disponibles = new List<LugarCandidatoDto>
         {
-            CrearLugar(turno: Turno.Manana, latitud: 0.01m, longitud: 0m)
+            CrearLugar(latitud: 0.01m, longitud: 0m)
         };
 
         refiner.Refinar(TipoRefinamiento.ReducirCaminata, itinerario, lugaresActuales, disponibles, viaje);
@@ -119,11 +119,11 @@ public class ItinerarioRefinerTests
         itinerario.Paradas.Add(CrearParada(actualId, Turno.Manana));
 
         var lugaresActuales = LugaresPorId(
-            CrearLugar(id: actualId, turno: Turno.Manana, aireLibre: false));
+            CrearLugar(id: actualId, aireLibre: false));
 
         var disponibles = new List<LugarCandidatoDto>
         {
-            CrearLugar(id: aireLibreId, turno: Turno.Manana, aireLibre: true)
+            CrearLugar(id: aireLibreId, aireLibre: true)
         };
 
         refiner.Refinar(TipoRefinamiento.MasAireLibre, itinerario, lugaresActuales, disponibles, viaje);
@@ -142,11 +142,11 @@ public class ItinerarioRefinerTests
         itinerario.Paradas.Add(CrearParada(actualId, Turno.Manana));
 
         var lugaresActuales = LugaresPorId(
-            CrearLugar(id: actualId, turno: Turno.Manana, aireLibre: true));
+            CrearLugar(id: actualId, aireLibre: true));
 
         var disponibles = new List<LugarCandidatoDto>
         {
-            CrearLugar(turno: Turno.Manana, aireLibre: true)
+            CrearLugar(aireLibre: true)
         };
 
         refiner.Refinar(TipoRefinamiento.MasAireLibre, itinerario, lugaresActuales, disponibles, viaje);
@@ -161,26 +161,23 @@ public class ItinerarioRefinerTests
         var refiner = CrearRefiner();
         var viaje = CrearViaje(presupuesto: NivelPresupuesto.SinRestricciones);
         var itinerario = CrearItinerario(viaje);
-        var parada1ActualId = Guid.NewGuid();
-        var parada2ActualId = Guid.NewGuid();
+        var actualId = Guid.NewGuid();
         var candidatoId = Guid.NewGuid();
 
-        itinerario.Paradas.Add(CrearParada(parada1ActualId, Turno.Manana, orden: 1));
-        itinerario.Paradas.Add(CrearParada(parada2ActualId, Turno.Tarde, orden: 1));
+        itinerario.Paradas.Add(CrearParada(actualId, Turno.Manana, orden: 1));
 
         var lugaresActuales = LugaresPorId(
-            CrearLugar(id: parada1ActualId, turno: Turno.Manana, precio: NivelPresupuesto.Equilibrado),
-            CrearLugar(id: parada2ActualId, turno: Turno.Tarde, precio: NivelPresupuesto.SinRestricciones));
+            CrearLugar(id: actualId, precio: NivelPresupuesto.Equilibrado));
 
         var disponibles = new List<LugarCandidatoDto>
         {
-            CrearLugar(id: candidatoId, turno: Turno.Manana, precio: NivelPresupuesto.Economico)
+            CrearLugar(id: candidatoId, precio: NivelPresupuesto.Economico)
         };
 
         refiner.Refinar(TipoRefinamiento.MasEconomico, itinerario, lugaresActuales, disponibles, viaje);
 
-        Assert.Equal(candidatoId, itinerario.Paradas.First(p => p.Turno == Turno.Manana).LugarId);
-        Assert.Contains(disponibles, l => l.Id == parada1ActualId);
+        Assert.Equal(candidatoId, itinerario.Paradas.Single().LugarId);
+        Assert.Contains(disponibles, l => l.Id == actualId);
     }
 
     [Fact]
@@ -193,8 +190,8 @@ public class ItinerarioRefinerTests
 
         var disponibles = new List<LugarCandidatoDto>
         {
-            CrearLugar(turno: Turno.Tarde, precio: NivelPresupuesto.Economico),
-            CrearLugar(turno: Turno.Noche, precio: NivelPresupuesto.Economico)
+            CrearLugar(precio: NivelPresupuesto.Economico),
+            CrearLugar(precio: NivelPresupuesto.Economico)
         };
 
         var sugerencias = refiner.SugerirTurnosLibres(itinerario, disponibles, viaje);
@@ -217,7 +214,7 @@ public class ItinerarioRefinerTests
 
         var disponibles = new List<LugarCandidatoDto>
         {
-            CrearLugar(turno: Turno.Tarde, precio: NivelPresupuesto.Equilibrado)
+            CrearLugar(precio: NivelPresupuesto.Equilibrado)
         };
 
         var sugerencias = refiner.SugerirTurnosLibres(itinerario, disponibles, viaje);
@@ -237,9 +234,9 @@ public class ItinerarioRefinerTests
 
         var disponibles = new List<LugarCandidatoDto>
         {
-            CrearLugar(turno: Turno.Manana),
-            CrearLugar(turno: Turno.Tarde),
-            CrearLugar(turno: Turno.Noche)
+            CrearLugar(),
+            CrearLugar(),
+            CrearLugar()
         };
 
         var sugerencias = refiner.SugerirTurnosLibres(itinerario, disponibles, viaje);
@@ -273,7 +270,7 @@ public class ItinerarioRefinerTests
                 0m),
             Guid.NewGuid(),
             "CODIGO1234",
-            new short[] { 1, 2 },
+            new[] { "cafe_especialidad", "museos_galerias" },
             null);
 
     private static ItinerarioEntity CrearItinerario(
@@ -315,7 +312,6 @@ public class ItinerarioRefinerTests
 
     private static LugarCandidatoDto CrearLugar(
         Guid? id = null,
-        Turno? turno = null,
         NivelPresupuesto precio = NivelPresupuesto.Economico,
         bool aireLibre = false,
         decimal latitud = -34.58m,
@@ -327,8 +323,6 @@ public class ItinerarioRefinerTests
             Nombre = "Lugar",
             Latitud = latitud,
             Longitud = longitud,
-            Turno = turno ?? Turno.Manana,
-            CategoriaId = 1,
             NivelPrecio = precio,
             EsAireLibre = aireLibre,
             DuracionSugeridaMinutos = duracionMinutos

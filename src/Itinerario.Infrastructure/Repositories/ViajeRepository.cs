@@ -71,22 +71,22 @@ public class ViajeRepository : IViajeRepository
 
     public void SincronizarEtiquetas(
         Viaje viaje,
-        IReadOnlyCollection<short> categoriaIds)
+        IReadOnlyCollection<string> categoriaCodigos)
     {
         var actuales = viaje.Etiquetas.ToList();
-        var deseadas = categoriaIds.ToHashSet();
+        var deseadas = categoriaCodigos.ToHashSet();
 
-        foreach (var etiqueta in actuales.Where(e => !deseadas.Contains(e.CategoriaId)))
+        foreach (var etiqueta in actuales.Where(e => !deseadas.Contains(e.CategoriaCodigo)))
         {
             viaje.Etiquetas.Remove(etiqueta);
             _context.EtiquetasViaje.Remove(etiqueta);
         }
 
-        var existentes = actuales.Select(e => e.CategoriaId).ToHashSet();
+        var existentes = actuales.Select(e => e.CategoriaCodigo).ToHashSet();
 
-        foreach (var categoriaId in deseadas.Where(c => !existentes.Contains(c)))
+        foreach (var categoriaCodigo in deseadas.Where(c => !existentes.Contains(c)))
         {
-            var nueva = new EtiquetaViaje { ViajeId = viaje.Id, CategoriaId = categoriaId };
+            var nueva = new EtiquetaViaje { ViajeId = viaje.Id, CategoriaCodigo = categoriaCodigo };
             viaje.Etiquetas.Add(nueva);
             _context.EtiquetasViaje.Add(nueva);
         }

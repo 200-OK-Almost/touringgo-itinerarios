@@ -20,7 +20,12 @@ public static class DependencyInjection
 
         services.AddScoped<IViajeRepository, ViajeRepository>();
         services.AddScoped<IItinerarioRepository, ItinerarioRepository>();
-        services.AddScoped<ILugaresClient, LugaresClient>();
+
+        services.AddHttpClient<ILugaresClient, LugaresClient>(client =>
+        {
+            client.BaseAddress = new Uri(configuration["Lugares:BaseUrl"]
+                ?? throw new InvalidOperationException("Lugares:BaseUrl is not configured."));
+        }).AddStandardResilienceHandler();
 
         return services;
     }
