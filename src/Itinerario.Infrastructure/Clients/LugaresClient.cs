@@ -1,59 +1,123 @@
+using System.Net;
+using System.Net.Http.Json;
 using Itinerario.Application.DTOs;
 using Itinerario.Application.Interfaces;
 using Itinerario.Domain.Enums;
+using Itinerario.Domain.Exceptions;
 
 namespace Itinerario.Infrastructure.Clients;
 
 public class LugaresClient : ILugaresClient
 {
-    private static readonly IReadOnlyList<LugarStub> Lugares = new List<LugarStub>
-    {
-        new(Guid.Parse("11111111-1111-1111-1111-111111111101"), "Plaza Serrano", BarrioCaba.Palermo, -34.5883m, -58.4306m, NivelPresupuesto.Economico, true, 45),
-        new(Guid.Parse("11111111-1111-1111-1111-111111111102"), "MALBA", BarrioCaba.Palermo, -34.5772m, -58.4028m, NivelPresupuesto.Equilibrado, false, 90),
-        new(Guid.Parse("11111111-1111-1111-1111-111111111103"), "Café de Recoleta", BarrioCaba.Recoleta, -34.5889m, -58.3934m, NivelPresupuesto.Economico, false, 60),
-        new(Guid.Parse("11111111-1111-1111-1111-111111111104"), "Feria de San Telmo", BarrioCaba.SanTelmo, -34.6215m, -58.3733m, NivelPresupuesto.Economico, true, 60),
-        new(Guid.Parse("11111111-1111-1111-1111-111111111105"), "Cena en Puerto Madero", BarrioCaba.PuertoMadero, -34.6118m, -58.3630m, NivelPresupuesto.SinRestricciones, true, 120)
-    };
+    private const int TamanoPagina = 100;
+    private const int MaximoPaginas = 100;
 
-    public Task<LugarCandidatoDto?> ObtenerPorIdAsync(Guid lugarId, CancellationToken cancellationToken = default)
-    {
-        var lugar = Lugares.FirstOrDefault(l => l.Id == lugarId);
+    private readonly HttpClient _httpClient;
 
-        return Task.FromResult(lugar is null ? null : Mapear(lugar));
+    public LugaresClient(HttpClient httpClient)
+    {
+        _httpClient = httpClient;
     }
 
-    public Task<IReadOnlyCollection<LugarCandidatoDto>> BuscarAsync(
+    public async Task<LugarCandidatoDto?> ObtenerPorIdAsync(Guid lugarId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var lugar = await _httpClient.GetFromJsonAsync<LugarItemDto>(
+                $"/api/lugares/{lugarId}", cancellationToken);
+
+            return lugar is null ? null : Mapear(lugar);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new ServicioExternoNoDisponibleException("No se pudo contactar con el catálogo de Lugares.", ex);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new ServicioExternoNoDisponibleException("El catálogo de Lugares no respondió a tiempo.");
+        }
+    }
+
+    public async Task<IReadOnlyCollection<LugarCandidatoDto>> BuscarAsync(
         BarrioCaba barrio,
         IReadOnlyCollection<string> categoriaCodigos,
         CancellationToken cancellationToken = default)
     {
-        // Stub: el filtro real por categoría se aplica en Lugares (HTTP). Aquí solo por barrio.
-        var resultado = Lugares
-            .Where(l => l.Barrio == barrio)
-            .Select(Mapear)
-            .ToList();
+        var resultados = new List<LugarCandidatoDto>();
 
-        return Task.FromResult<IReadOnlyCollection<LugarCandidatoDto>>(resultado);
+        for (var pagina = 1; pagina <= MaximoPaginas; pagina++)
+        {
+            var respuesta = await ObtenerPaginaAsync(barrio, categoriaCodigos, pagina, cancellationToken);
+
+            if (respuesta is null)
+            {
+                break;
+            }
+
+            resultados.AddRange(respuesta.Items.Select(Mapear));
+
+            if (respuesta.Items.Count < TamanoPagina || resultados.Count >= respuesta.Total)
+            {
+                break;
+            }
+        }
+
+        return resultados;
     }
 
-    private static LugarCandidatoDto Mapear(LugarStub lugar) => new()
+    private async Task<LugaresPaginadosDto?> ObtenerPaginaAsync(
+        BarrioCaba barrio,
+        IReadOnlyCollection<string> categoriaCodigos,
+        int pagina,
+        CancellationToken cancellationToken)
+    {
+        var parametros = new List<string>
+        {
+            $"barrio={Uri.EscapeDataString(barrio.ToString())}",
+            $"pagina={pagina}",
+            $"tamano={TamanoPagina}"
+        };
+
+        foreach (var codigo in categoriaCodigos)
+        {
+            parametros.Add($"categoriaCodigo={Uri.EscapeDataString(codigo)}");
+        }
+
+        var url = "/api/lugares?" + string.Join('&', parametros);
+
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<LugaresPaginadosDto>(url, cancellationToken);
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new ServicioExternoNoDisponibleException("No se pudo contactar con el catálogo de Lugares.", ex);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new ServicioExternoNoDisponibleException("El catálogo de Lugares no respondió a tiempo.");
+        }
+    }
+
+    private static LugarCandidatoDto Mapear(LugarItemDto lugar) => new()
     {
         Id = lugar.Id,
         Nombre = lugar.Nombre,
         Latitud = lugar.Latitud,
         Longitud = lugar.Longitud,
-        NivelPrecio = lugar.NivelPrecio,
-        EsAireLibre = lugar.EsAireLibre,
-        DuracionSugeridaMinutos = lugar.DuracionSugeridaMinutos
+        NivelPrecio = MapearNivelPrecio(lugar.NivelPrecio),
+        EsAireLibre = lugar.EsAlAireLibre,
+        DuracionSugeridaMinutos = lugar.DuracionEstimadaMinutos
     };
 
-    private sealed record LugarStub(
-        Guid Id,
-        string Nombre,
-        BarrioCaba Barrio,
-        decimal Latitud,
-        decimal Longitud,
-        NivelPresupuesto NivelPrecio,
-        bool EsAireLibre,
-        short DuracionSugeridaMinutos);
+    private static NivelPresupuesto MapearNivelPrecio(short nivelPrecio) => nivelPrecio switch
+    {
+        1 => NivelPresupuesto.Economico,
+        2 => NivelPresupuesto.Equilibrado,
+        _ => NivelPresupuesto.SinRestricciones
+    };
 }

@@ -29,6 +29,7 @@ public class GlobalExceptionHandler : IExceptionHandler
             AccesoDenegadoException => (StatusCodes.Status403Forbidden, "Forbidden"),
             UnauthorizedAccessException => (StatusCodes.Status401Unauthorized, "Unauthorized"),
             ConflictoDeConcurrenciaException => (StatusCodes.Status409Conflict, "Conflict"),
+            ServicioExternoNoDisponibleException => (StatusCodes.Status503ServiceUnavailable, "Service Unavailable"),
             _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred.")
         };
 
