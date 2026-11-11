@@ -138,12 +138,16 @@ public class LugaresClient : ILugaresClient
     {
         Id = lugar.Id,
         Nombre = lugar.Nombre,
+        Barrio = ParseBarrio(lugar.Barrio),
         Latitud = lugar.Latitud,
         Longitud = lugar.Longitud,
         NivelPrecio = MapearNivelPrecio(lugar.NivelPrecio),
         EsAireLibre = lugar.EsAlAireLibre,
         DuracionSugeridaMinutos = lugar.DuracionEstimadaMinutos
     };
+
+    private static BarrioCaba ParseBarrio(string? barrio)
+        => Enum.TryParse<BarrioCaba>(barrio, ignoreCase: true, out var result) ? result : BarrioCaba.Palermo;
 
     private static NivelPresupuesto MapearNivelPrecio(short nivelPrecio) => nivelPrecio switch
     {

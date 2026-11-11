@@ -14,19 +14,25 @@ public class ItinerarioService : IItinerarioService
     private readonly ILugaresClient _lugaresClient;
     private readonly IItinerarioGenerator _generator;
     private readonly IItinerarioRefiner _refiner;
+    private readonly IUsuariosClient _usuariosClient;
+    private readonly IOllamaClient _ollamaClient;
 
     public ItinerarioService(
         IViajeRepository viajeRepository,
         IItinerarioRepository itinerarioRepository,
         ILugaresClient lugaresClient,
         IItinerarioGenerator generator,
-        IItinerarioRefiner refiner)
+        IItinerarioRefiner refiner,
+        IUsuariosClient usuariosClient,
+        IOllamaClient ollamaClient)
     {
         _viajeRepository = viajeRepository;
         _itinerarioRepository = itinerarioRepository;
         _lugaresClient = lugaresClient;
         _generator = generator;
         _refiner = refiner;
+        _usuariosClient = usuariosClient;
+        _ollamaClient = ollamaClient;
     }
 
     public async Task<IReadOnlyCollection<ItinerarioResponseDto>> GenerarAsync(
@@ -42,10 +48,10 @@ public class ItinerarioService : IItinerarioService
             throw new AccesoDenegadoException("Solo un administrador del viaje puede generar el itinerario.");
         }
 
-        var categoriaCodigos = viaje.Etiquetas.Select(e => e.CategoriaCodigo).ToList();
-        var lugares = await _lugaresClient.BuscarAsync(viaje.Barrio, categoriaCodigos, cancellationToken);
+        var perfil = await ObtenerPerfilSeguroAsync(cancellationToken);
+        var disponibles = await BuscarCandidatosAsync(viaje, perfil, cancellationToken);
+        var nombres = disponibles.ToDictionary(l => l.Id, l => l.Nombre);
 
-        var disponibles = lugares.ToList();
         var itinerarios = new List<ItinerarioEntity>();
 
         foreach (var dia in CalcularDias(viaje))
@@ -76,12 +82,121 @@ public class ItinerarioService : IItinerarioService
             itinerarios.Add(itinerario);
         }
 
+        await RellenarSugerenciasAsync(
+            itinerarios.SelectMany(i => i.Paradas),
+            nombres,
+            cancellationToken);
+
         viaje.CambiarEstado(EstadoViaje.Planificado);
 
         await _itinerarioRepository.ReemplazarAsync(viaje.Id, itinerarios, cancellationToken);
 
         return itinerarios.Select(MapearRespuesta).ToList();
     }
+
+    private async Task<PerfilViajeroDto?> ObtenerPerfilSeguroAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _usuariosClient.ObtenerPerfilAsync(cancellationToken);
+        }
+        catch (ServicioExternoNoDisponibleException)
+        {
+            return null;
+        }
+    }
+
+    private async Task<List<LugarCandidatoDto>> BuscarCandidatosAsync(
+        Viaje viaje,
+        PerfilViajeroDto? perfil,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var intencion = ConstruirIntencion(viaje, perfil);
+            var semanticos = await _lugaresClient.BuscarSemanticoAsync(intencion, 20, cancellationToken);
+
+            var delBarrio = semanticos.Where(l => l.Barrio == viaje.Barrio).ToList();
+            if (delBarrio.Count >= 2)
+            {
+                return delBarrio;
+            }
+        }
+        catch (ServicioExternoNoDisponibleException)
+        {
+            // degrada al filtro determinista por barrio y categorías
+        }
+
+        var categoriaCodigos = viaje.Etiquetas.Select(e => e.CategoriaCodigo).ToList();
+        var categoricos = await _lugaresClient.BuscarAsync(viaje.Barrio, categoriaCodigos, cancellationToken);
+        return categoricos.ToList();
+    }
+
+    private async Task RellenarSugerenciasAsync(
+        IEnumerable<ParadaItinerario> paradas,
+        IReadOnlyDictionary<Guid, string> nombres,
+        CancellationToken cancellationToken)
+    {
+        foreach (var parada in paradas)
+        {
+            var nombre = nombres.TryGetValue(parada.LugarId, out var n) ? n : "este lugar";
+            var prompt = $"Escribí una frase corta (máximo 25 palabras) sugiriendo qué hacer en \"{nombre}\" durante el turno {parada.Turno}. Respondé solo la frase, sin comillas ni markdown.";
+
+            try
+            {
+                var texto = await _ollamaClient.ChatTextoAsync(prompt, cancellationToken);
+                parada.SugerenciaIa = Truncar(texto, 255);
+            }
+            catch (ServicioExternoNoDisponibleException)
+            {
+                // sin sugerencia; no rompe la generación
+            }
+        }
+    }
+
+    private static string ConstruirIntencion(Viaje viaje, PerfilViajeroDto? perfil)
+    {
+        var categorias = viaje.Etiquetas
+            .Select(e => NombreCategoria(e.CategoriaCodigo))
+            .Where(n => n is not null)
+            .Cast<string>()
+            .ToList();
+
+        var partes = new List<string> { $"Lugares en {viaje.Barrio}" };
+        if (categorias.Count > 0)
+        {
+            partes.Add($"de tipo {string.Join(", ", categorias)}");
+        }
+
+        partes.Add($"presupuesto {viaje.NivelPresupuesto}");
+
+        if (perfil?.RequiereRecorridoSinEscalones == true)
+        {
+            partes.Add("accesibles, sin escalones");
+        }
+
+        if (perfil?.RequiereBanoAccesible == true)
+        {
+            partes.Add("con baño accesible");
+        }
+
+        return string.Join(", ", partes);
+    }
+
+    private static string? NombreCategoria(string codigo) => codigo switch
+    {
+        "cafe_especialidad" => "café de especialidad",
+        "museos_galerias" => "museos y galerías",
+        "parques_aire_libre" => "parques y aire libre",
+        "librerias_diseno" => "librerías y diseño",
+        "bares_vermu" => "bares y vermuterías",
+        "gastronomia_clasica" => "gastronomía clásica",
+        "cocteleria_autor" => "coctelería de autor",
+        _ => null
+    };
+
+    private static string Truncar(string texto, int max)
+        => texto.Length <= max ? texto : texto[..max];
 
     public async Task<IReadOnlyCollection<ItinerarioResponseDto>> ObtenerAsync(
         Guid viajeId,
