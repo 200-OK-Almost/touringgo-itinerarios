@@ -103,6 +103,37 @@ public class LugaresClient : ILugaresClient
         }
     }
 
+    public async Task<IReadOnlyCollection<LugarCandidatoDto>> BuscarSemanticoAsync(
+        string query,
+        int cantidad,
+        CancellationToken cancellationToken = default)
+    {
+        var request = new BusquedaSemanticaRequest { Query = query, Cantidad = cantidad };
+
+        try
+        {
+            using var response = await _httpClient.PostAsJsonAsync("/api/lugares", request, cancellationToken);
+            response.EnsureSuccessStatusCode();
+
+            var items = await response.Content.ReadFromJsonAsync<List<LugarItemDto>>(cancellationToken: cancellationToken);
+            return (items ?? new List<LugarItemDto>()).Select(Mapear).ToList();
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new ServicioExternoNoDisponibleException("No se pudo realizar la búsqueda semántica en Lugares.", ex);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new ServicioExternoNoDisponibleException("El catálogo de Lugares no respondió a tiempo.");
+        }
+    }
+
+    private sealed class BusquedaSemanticaRequest
+    {
+        public string Query { get; set; } = string.Empty;
+        public int Cantidad { get; set; }
+    }
+
     private static LugarCandidatoDto Mapear(LugarItemDto lugar) => new()
     {
         Id = lugar.Id,

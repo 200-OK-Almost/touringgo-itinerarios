@@ -11,4 +11,9 @@ public interface ILugaresClient
         BarrioCaba barrio,
         IReadOnlyCollection<string> categoriaCodigos,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyCollection<LugarCandidatoDto>> BuscarSemanticoAsync(
+        string query,
+        int cantidad,
+        CancellationToken cancellationToken = default);
 }
