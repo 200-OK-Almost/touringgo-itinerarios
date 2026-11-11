@@ -16,6 +16,7 @@ public class ItinerarioService : IItinerarioService
     private readonly IItinerarioRefiner _refiner;
     private readonly IUsuariosClient _usuariosClient;
     private readonly IOllamaClient _ollamaClient;
+    private readonly IInterpretacionService _interpretacionService;
 
     public ItinerarioService(
         IViajeRepository viajeRepository,
@@ -24,7 +25,8 @@ public class ItinerarioService : IItinerarioService
         IItinerarioGenerator generator,
         IItinerarioRefiner refiner,
         IUsuariosClient usuariosClient,
-        IOllamaClient ollamaClient)
+        IOllamaClient ollamaClient,
+        IInterpretacionService interpretacionService)
     {
         _viajeRepository = viajeRepository;
         _itinerarioRepository = itinerarioRepository;
@@ -33,6 +35,7 @@ public class ItinerarioService : IItinerarioService
         _refiner = refiner;
         _usuariosClient = usuariosClient;
         _ollamaClient = ollamaClient;
+        _interpretacionService = interpretacionService;
     }
 
     public async Task<IReadOnlyCollection<ItinerarioResponseDto>> GenerarAsync(
@@ -239,6 +242,18 @@ public class ItinerarioService : IItinerarioService
         return itinerarios.Select(MapearRespuesta).ToList();
     }
 
+    public async Task<IReadOnlyCollection<ItinerarioResponseDto>> RefinarPorTextoAsync(
+        Guid viajeId,
+        string texto,
+        short? numeroDia,
+        Guid usuarioIdSolicitante,
+        CancellationToken cancellationToken = default)
+    {
+        var tipo = await _interpretacionService.InterpretarRefinamientoAsync(texto, cancellationToken);
+
+        return await RefinarAsync(viajeId, tipo, numeroDia, usuarioIdSolicitante, cancellationToken);
+    }
+
     public async Task<IReadOnlyCollection<ItinerarioResponseDto>> SugerirTurnosLibresAsync(
         Guid viajeId,
         short? numeroDia,
@@ -248,7 +263,8 @@ public class ItinerarioService : IItinerarioService
         var (viaje, itinerarios) = await PrepararModificacionAsync(
             viajeId, numeroDia, usuarioIdSolicitante, cancellationToken);
 
-        var lugares = await BuscarLugaresAsync(viaje, cancellationToken);
+        var perfil = await ObtenerPerfilSeguroAsync(cancellationToken);
+        var lugares = await BuscarCandidatosAsync(viaje, perfil, cancellationToken);
         var disponibles = ConstruirDisponibles(itinerarios, lugares, viaje);
 
         foreach (var itinerario in itinerarios)

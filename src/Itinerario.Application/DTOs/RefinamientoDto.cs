@@ -5,5 +5,6 @@ namespace Itinerario.Application.DTOs;
 public class RefinamientoDto
 {
     public TipoRefinamiento Tipo { get; set; }
+    public string? Texto { get; set; }
     public short? NumeroDia { get; set; }
 }

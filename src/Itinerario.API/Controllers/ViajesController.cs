@@ -109,7 +109,16 @@ public class ViajesController : ControllerBase
         Guid id,
         [FromBody] RefinamientoDto dto,
         CancellationToken cancellationToken)
-        => Ok(await _itinerarioService.RefinarAsync(id, dto.Tipo, dto.NumeroDia, _currentUser.UsuarioId, cancellationToken));
+    {
+        if (!string.IsNullOrWhiteSpace(dto.Texto))
+        {
+            return Ok(await _itinerarioService.RefinarPorTextoAsync(
+                id, dto.Texto, dto.NumeroDia, _currentUser.UsuarioId, cancellationToken));
+        }
+
+        return Ok(await _itinerarioService.RefinarAsync(
+            id, dto.Tipo, dto.NumeroDia, _currentUser.UsuarioId, cancellationToken));
+    }
 
     [HttpPost("{id:guid}/sugerencias-turnos-libres")]
     [ProducesResponseType(typeof(IReadOnlyCollection<ItinerarioResponseDto>), StatusCodes.Status200OK)]

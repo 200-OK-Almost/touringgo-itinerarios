@@ -63,6 +63,23 @@ public class InterpretacionService : IInterpretacionService
         };
     }
 
+    public async Task<TipoRefinamiento> InterpretarRefinamientoAsync(string texto, CancellationToken cancellationToken = default)
+    {
+        var prompt = $$"""
+            Clasificá el siguiente pedido de refinamiento de un recorrido en UNA de estas opciones:
+            - "MasEconomico" (más barato o económico)
+            - "ReducirCaminata" (menos caminata, lugares más cercanos entre sí)
+            - "MasAireLibre" (más lugares al aire libre)
+
+            Respondé ÚNICAMENTE con un JSON válido: { "tipo": "MasEconomico" | "ReducirCaminata" | "MasAireLibre" }
+
+            Pedido: {{texto}}
+            """;
+
+        var crudo = await _ollamaClient.ChatJsonAsync<RefinamientoCrudo>(prompt, cancellationToken);
+        return ParseEnum(crudo.Tipo, TipoRefinamiento.MasEconomico);
+    }
+
     private static List<string> NormalizarCategorias(List<string>? categorias)
         => (categorias ?? new List<string>())
             .Where(c => !string.IsNullOrWhiteSpace(c))
@@ -86,5 +103,10 @@ public class InterpretacionService : IInterpretacionService
         public string? NivelPresupuesto { get; set; }
         public string? RitmoCaminata { get; set; }
         public List<string>? CategoriaCodigos { get; set; }
+    }
+
+    private sealed class RefinamientoCrudo
+    {
+        public string? Tipo { get; set; }
     }
 }
