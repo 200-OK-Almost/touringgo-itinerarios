@@ -12,15 +12,18 @@ public class ViajesController : ControllerBase
 {
     private readonly IViajeService _service;
     private readonly IItinerarioService _itinerarioService;
+    private readonly IInterpretacionService _interpretacionService;
     private readonly ICurrentUser _currentUser;
 
     public ViajesController(
         IViajeService service,
         IItinerarioService itinerarioService,
+        IInterpretacionService interpretacionService,
         ICurrentUser currentUser)
     {
         _service = service;
         _itinerarioService = itinerarioService;
+        _interpretacionService = interpretacionService;
         _currentUser = currentUser;
     }
 
@@ -34,6 +37,15 @@ public class ViajesController : ControllerBase
 
         return CreatedAtAction(nameof(ObtenerPorId), new { id = viaje.Id }, viaje);
     }
+
+    [HttpPost("bosquejo")]
+    [ProducesResponseType(typeof(BosquejoViajeDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<BosquejoViajeDto>> InterpretarBosquejo(
+        [FromBody] BosquejoRequestDto dto,
+        CancellationToken cancellationToken)
+        => Ok(await _interpretacionService.InterpretarAsync(dto.Texto, cancellationToken));
 
     [HttpGet]
     public async Task<ActionResult<ResultadoPaginadoDto<ViajeResponseDto>>> Listar(

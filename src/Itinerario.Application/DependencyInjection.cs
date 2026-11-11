@@ -17,6 +17,7 @@ public static class DependencyInjection
         services.AddScoped<IItinerarioRefiner, ItinerarioRefiner>();
         services.AddScoped<IViajeService, ViajeService>();
         services.AddScoped<IItinerarioService, ItinerarioService>();
+        services.AddScoped<IInterpretacionService, InterpretacionService>();
 
         return services;
     }
