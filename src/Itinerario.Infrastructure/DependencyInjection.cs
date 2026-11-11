@@ -33,6 +33,12 @@ public static class DependencyInjection
                 ?? throw new InvalidOperationException("Ollama:BaseUrl is not configured."));
         }).AddStandardResilienceHandler();
 
+        services.AddHttpClient<IUsuariosClient, UsuariosClient>(client =>
+        {
+            client.BaseAddress = new Uri(configuration["Usuarios:BaseUrl"]
+                ?? throw new InvalidOperationException("Usuarios:BaseUrl is not configured."));
+        }).AddStandardResilienceHandler();
+
         return services;
     }
 }
