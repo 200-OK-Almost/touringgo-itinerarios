@@ -273,7 +273,6 @@ public class ItinerarioService : IItinerarioService
             foreach (var sugerencia in sugerencias)
             {
                 _itinerarioRepository.AgregarParada(sugerencia);
-                itinerario.Paradas.Add(sugerencia);
             }
         }
 
