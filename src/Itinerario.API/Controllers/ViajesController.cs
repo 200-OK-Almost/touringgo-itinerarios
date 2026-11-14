@@ -12,15 +12,18 @@ public class ViajesController : ControllerBase
 {
     private readonly IViajeService _service;
     private readonly IItinerarioService _itinerarioService;
+    private readonly IInterpretacionService _interpretacionService;
     private readonly ICurrentUser _currentUser;
 
     public ViajesController(
         IViajeService service,
         IItinerarioService itinerarioService,
+        IInterpretacionService interpretacionService,
         ICurrentUser currentUser)
     {
         _service = service;
         _itinerarioService = itinerarioService;
+        _interpretacionService = interpretacionService;
         _currentUser = currentUser;
     }
 
@@ -34,6 +37,15 @@ public class ViajesController : ControllerBase
 
         return CreatedAtAction(nameof(ObtenerPorId), new { id = viaje.Id }, viaje);
     }
+
+    [HttpPost("bosquejo")]
+    [ProducesResponseType(typeof(BosquejoViajeDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<BosquejoViajeDto>> InterpretarBosquejo(
+        [FromBody] BosquejoRequestDto dto,
+        CancellationToken cancellationToken)
+        => Ok(await _interpretacionService.InterpretarAsync(dto.Texto, cancellationToken));
 
     [HttpGet]
     public async Task<ActionResult<ResultadoPaginadoDto<ViajeResponseDto>>> Listar(
@@ -97,7 +109,16 @@ public class ViajesController : ControllerBase
         Guid id,
         [FromBody] RefinamientoDto dto,
         CancellationToken cancellationToken)
-        => Ok(await _itinerarioService.RefinarAsync(id, dto.Tipo, dto.NumeroDia, _currentUser.UsuarioId, cancellationToken));
+    {
+        if (!string.IsNullOrWhiteSpace(dto.Texto))
+        {
+            return Ok(await _itinerarioService.RefinarPorTextoAsync(
+                id, dto.Texto, dto.NumeroDia, _currentUser.UsuarioId, cancellationToken));
+        }
+
+        return Ok(await _itinerarioService.RefinarAsync(
+            id, dto.Tipo, dto.NumeroDia, _currentUser.UsuarioId, cancellationToken));
+    }
 
     [HttpPost("{id:guid}/sugerencias-turnos-libres")]
     [ProducesResponseType(typeof(IReadOnlyCollection<ItinerarioResponseDto>), StatusCodes.Status200OK)]

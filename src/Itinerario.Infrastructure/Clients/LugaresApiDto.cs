@@ -12,6 +12,7 @@ internal sealed class LugarItemDto
 {
     public Guid Id { get; set; }
     public string Nombre { get; set; } = string.Empty;
+    public string? Barrio { get; set; }
     public decimal Latitud { get; set; }
     public decimal Longitud { get; set; }
     public short DuracionEstimadaMinutos { get; set; }

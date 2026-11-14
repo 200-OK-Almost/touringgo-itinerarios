@@ -27,6 +27,24 @@ public static class DependencyInjection
                 ?? throw new InvalidOperationException("Lugares:BaseUrl is not configured."));
         }).AddStandardResilienceHandler();
 
+        services.AddHttpClient<IOllamaClient, OllamaClient>(client =>
+        {
+            client.BaseAddress = new Uri(configuration["Ollama:BaseUrl"]
+                ?? throw new InvalidOperationException("Ollama:BaseUrl is not configured."));
+        }).AddStandardResilienceHandler(options =>
+        {
+            options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(60);
+            options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(120);
+            options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(120);
+            options.Retry.MaxRetryAttempts = 1;
+        });
+
+        services.AddHttpClient<IUsuariosClient, UsuariosClient>(client =>
+        {
+            client.BaseAddress = new Uri(configuration["Usuarios:BaseUrl"]
+                ?? throw new InvalidOperationException("Usuarios:BaseUrl is not configured."));
+        }).AddStandardResilienceHandler();
+
         return services;
     }
 }
