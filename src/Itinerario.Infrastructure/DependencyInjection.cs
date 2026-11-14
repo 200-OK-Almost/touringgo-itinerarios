@@ -31,7 +31,12 @@ public static class DependencyInjection
         {
             client.BaseAddress = new Uri(configuration["Ollama:BaseUrl"]
                 ?? throw new InvalidOperationException("Ollama:BaseUrl is not configured."));
-        }).AddStandardResilienceHandler();
+        }).AddStandardResilienceHandler(options =>
+        {
+            options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(60);
+            options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(120);
+            options.Retry.MaxRetryAttempts = 1;
+        });
 
         services.AddHttpClient<IUsuariosClient, UsuariosClient>(client =>
         {
