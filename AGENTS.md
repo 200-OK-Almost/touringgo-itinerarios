@@ -70,7 +70,7 @@ Fase 6 (refinamientos y sugerencias de turno libre): `ItinerarioRefiner` puro co
 
 (integración real): JWT (Issuer/Audience/`Jwt:Key`, cookie `access_token`), `[Authorize]` en `ViajesController`, `X-Usuario-Id` solo dev/testing, migraciones al arrancar, `LugaresClient` por HTTP (`GET /api/lugares` con `barrio` + `categoriaCodigo` OR, loop de páginas con tope, resiliencia y `ServicioExternoNoDisponibleException` → 503), **turno por orden** (ya no viene del catálogo), **categorías por `codigo`** (`EtiquetaViaje.CategoriaCodigo` string; DTOs `CategoriaCodigos`), y tests de `LugaresClient` (38 en total).
 
-Pendiente: consumo del perfil de Usuarios (diferido a 7c), Gemini (`sugerencia_ia`, NL→parámetros, reordenar/personalizar) y documentación de Infra (`.env.example`).
+IA — Ollama + embeddings: `OllamaClient` (`/v1/chat/completions`, JSON mode) e `InterpretacionService` (`POST /api/viajes/bosquejo` NL→parámetros y refinar por texto), `UsuariosClient` (`GET /api/me/perfil` reenviando el token del usuario), `LugaresClient.BuscarSemanticoAsync` (`POST /api/lugares`, búsqueda por embeddings/pgvector de Lugares), `ItinerarioService.GenerarAsync` personaliza (perfil → intención → semántico con filtro por barrio y fallback al catálogo → determinista → `sugerencia_ia` por parada), sugerencias de turnos libres con candidatos semánticos. Config: `Ollama:BaseUrl/Model`, `Usuarios:BaseUrl`. Degradación: si Ollama/Usuarios/embeddings caen, la generación determinista sigue.
 
 Limitaciones conocidas:
 
