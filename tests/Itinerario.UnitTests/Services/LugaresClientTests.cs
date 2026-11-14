@@ -106,6 +106,27 @@ public class LugaresClientTests
         Assert.Equal(NivelPresupuesto.SinRestricciones, Assert.Single(resultado).NivelPrecio);
     }
 
+    [Fact]
+    public async Task BuscarSemanticoAsync_MapeaRespuesta()
+    {
+        var handler = new FakeHandler(_ => JsonResponse(
+            """
+            [
+              { "id": "11111111-1111-1111-1111-111111111101", "nombre": "Plaza Serrano", "barrio": "Palermo", "latitud": -34.5883, "longitud": -58.4306, "duracionEstimadaMinutos": 45, "nivelPrecio": 2, "esAlAireLibre": true }
+            ]
+            """));
+
+        var client = new LugaresClient(new HttpClient(handler) { BaseAddress = new Uri("http://test") });
+
+        var resultado = await client.BuscarSemanticoAsync("cafe tranquilo", 10);
+
+        var unico = Assert.Single(resultado);
+        Assert.Equal("Plaza Serrano", unico.Nombre);
+        Assert.Equal(BarrioCaba.Palermo, unico.Barrio);
+        Assert.Equal(NivelPresupuesto.Equilibrado, unico.NivelPrecio);
+        Assert.True(unico.EsAireLibre);
+    }
+
     private static HttpResponseMessage JsonResponse(string json)
         => new(HttpStatusCode.OK)
         {
