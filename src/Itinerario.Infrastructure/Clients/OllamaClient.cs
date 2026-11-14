@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Itinerario.Application.Interfaces;
 using Itinerario.Domain.Exceptions;
 using Microsoft.Extensions.Configuration;
+using Polly.Timeout;
 
 namespace Itinerario.Infrastructure.Clients;
 
@@ -59,6 +60,10 @@ public class OllamaClient : IOllamaClient
         catch (HttpRequestException ex)
         {
             throw new ServicioExternoNoDisponibleException("No se pudo contactar con el LLM (Ollama).", ex);
+        }
+        catch (TimeoutRejectedException)
+        {
+            throw new ServicioExternoNoDisponibleException("El LLM (Ollama) no respondió a tiempo.");
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
