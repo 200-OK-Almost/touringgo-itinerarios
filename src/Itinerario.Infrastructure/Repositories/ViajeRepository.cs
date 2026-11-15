@@ -22,6 +22,8 @@ public class ViajeRepository : IViajeRepository
             .Include(v => v.Miembros)
             .Include(v => v.Etiquetas)
             .Include(v => v.ParametrosFamilia)
+            .Include(v => v.Itinerarios)
+                .ThenInclude(i => i.Paradas)
             .FirstOrDefaultAsync(v => v.Id == id, cancellationToken);
 
     public async Task<ResultadoPaginado<Viaje>> ObtenerPaginadoAsync(

@@ -239,6 +239,45 @@ public class ViajeService : IViajeService
                 MovilidadReducida = viaje.ParametrosFamilia.MovilidadReducida,
                 RequiereRitmoBajo = viaje.ParametrosFamilia.RequiereRitmoBajo,
                 RequiereMenuInfantil = viaje.ParametrosFamilia.RequiereMenuInfantil
-            }
+            },
+        Itinerarios = viaje.Itinerarios?.Count > 0
+            ? viaje.Itinerarios
+                .OrderBy(i => i.NumeroDia)
+                .Select(MapearItinerario)
+                .ToList()
+            : null
+    };
+
+    private static ItinerarioResponseDto MapearItinerario(Domain.Entities.Itinerario itinerario) => new()
+    {
+        Id = itinerario.Id,
+        ViajeId = itinerario.ViajeId,
+        NumeroDia = itinerario.NumeroDia,
+        Fecha = itinerario.Fecha,
+        OrigenTipo = itinerario.OrigenTipo,
+        OrigenDescripcion = itinerario.OrigenDescripcion,
+        OrigenLatitud = itinerario.OrigenLatitud,
+        OrigenLongitud = itinerario.OrigenLongitud,
+        Paradas = itinerario.Paradas
+            .OrderBy(p => p.Turno)
+            .ThenBy(p => p.OrdenParada)
+            .Select(MapearParada)
+            .ToList()
+    };
+
+    private static ParadaItinerarioDto MapearParada(ParadaItinerario parada) => new()
+    {
+        Id = parada.Id,
+        LugarId = parada.LugarId,
+        Turno = parada.Turno,
+        OrdenParada = parada.OrdenParada,
+        HoraInicio = parada.HoraInicio,
+        DuracionMinutos = parada.DuracionMinutos,
+        DistanciaMetrosDesdeAnterior = parada.DistanciaMetrosDesdeAnterior,
+        CuadrasDesdeAnterior = parada.CuadrasDesdeAnterior,
+        MinutosAPieDesdeAnterior = parada.MinutosAPieDesdeAnterior,
+        OrigenParada = parada.OrigenParada,
+        SugerenciaIa = parada.SugerenciaIa,
+        NotasPersonales = parada.NotasPersonales
     };
 }

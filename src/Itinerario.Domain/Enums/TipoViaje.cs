@@ -4,5 +4,6 @@ public enum TipoViaje
 {
     Solo,
     Familia,
+    Pareja,
     Amigos
 }

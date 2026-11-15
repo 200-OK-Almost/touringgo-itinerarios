@@ -86,6 +86,7 @@ public class ViajesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<IReadOnlyCollection<ItinerarioResponseDto>>> GenerarItinerario(
         Guid id,
         CancellationToken cancellationToken)
