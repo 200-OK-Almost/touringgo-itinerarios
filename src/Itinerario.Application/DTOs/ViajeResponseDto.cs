@@ -27,4 +27,5 @@ public class ViajeResponseDto
     public DateTimeOffset FechaActualizacion { get; set; }
     public IReadOnlyCollection<string> CategoriaCodigos { get; set; } = new List<string>();
     public ParametrosFamiliaDto? ParametrosFamilia { get; set; }
+    public IReadOnlyCollection<ItinerarioResponseDto>? Itinerarios { get; set; }
 }

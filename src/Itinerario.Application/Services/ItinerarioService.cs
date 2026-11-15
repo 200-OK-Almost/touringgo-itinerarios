@@ -51,50 +51,78 @@ public class ItinerarioService : IItinerarioService
             throw new AccesoDenegadoException("Solo un administrador del viaje puede generar el itinerario.");
         }
 
-        var perfil = await ObtenerPerfilSeguroAsync(cancellationToken);
-        var disponibles = await BuscarCandidatosAsync(viaje, perfil, cancellationToken);
-        var nombres = disponibles.ToDictionary(l => l.Id, l => l.Nombre);
-
-        var itinerarios = new List<ItinerarioEntity>();
-
-        foreach (var dia in CalcularDias(viaje))
+        if (viaje.Estado == EstadoViaje.EnPlanificacion)
         {
-            var paradas = _generator.Generar(viaje, disponibles).ToList();
-
-            var itinerario = new ItinerarioEntity
-            {
-                Id = Guid.NewGuid(),
-                ViajeId = viaje.Id,
-                NumeroDia = dia.NumeroDia,
-                Fecha = dia.Fecha,
-                OrigenTipo = viaje.TipoPuntoPartida,
-                OrigenDescripcion = viaje.NombrePuntoPartida ?? viaje.DireccionPartida,
-                OrigenLatitud = viaje.LatitudPartida,
-                OrigenLongitud = viaje.LongitudPartida,
-                FechaCreacion = DateTimeOffset.UtcNow,
-                FechaActualizacion = DateTimeOffset.UtcNow,
-                Paradas = paradas
-            };
-
-            foreach (var parada in paradas)
-            {
-                parada.ItinerarioId = itinerario.Id;
-                disponibles.RemoveAll(l => l.Id == parada.LugarId);
-            }
-
-            itinerarios.Add(itinerario);
+            throw new ConflictoDeConcurrenciaException("Ya hay una generación de itinerario en curso para este viaje.");
         }
 
-        await RellenarSugerenciasAsync(
-            itinerarios.SelectMany(i => i.Paradas),
-            nombres,
-            cancellationToken);
+        var estadoAnterior = viaje.Estado;
+        viaje.CambiarEstado(EstadoViaje.EnPlanificacion);
+        _viajeRepository.Actualizar(viaje);
+        await _viajeRepository.GuardarCambiosAsync(cancellationToken);
 
-        viaje.CambiarEstado(EstadoViaje.Planificado);
+        try
+        {
+            var perfil = await ObtenerPerfilSeguroAsync(cancellationToken);
+            var disponibles = await BuscarCandidatosAsync(viaje, perfil, cancellationToken);
+            var nombres = disponibles.ToDictionary(l => l.Id, l => l.Nombre);
 
-        await _itinerarioRepository.ReemplazarAsync(viaje.Id, itinerarios, cancellationToken);
+            var itinerarios = new List<ItinerarioEntity>();
 
-        return itinerarios.Select(MapearRespuesta).ToList();
+            foreach (var dia in CalcularDias(viaje))
+            {
+                var paradas = _generator.Generar(viaje, disponibles).ToList();
+
+                var itinerario = new ItinerarioEntity
+                {
+                    Id = Guid.NewGuid(),
+                    ViajeId = viaje.Id,
+                    NumeroDia = dia.NumeroDia,
+                    Fecha = dia.Fecha,
+                    OrigenTipo = viaje.TipoPuntoPartida,
+                    OrigenDescripcion = viaje.NombrePuntoPartida ?? viaje.DireccionPartida,
+                    OrigenLatitud = viaje.LatitudPartida,
+                    OrigenLongitud = viaje.LongitudPartida,
+                    FechaCreacion = DateTimeOffset.UtcNow,
+                    FechaActualizacion = DateTimeOffset.UtcNow,
+                    Paradas = paradas
+                };
+
+                foreach (var parada in paradas)
+                {
+                    parada.ItinerarioId = itinerario.Id;
+                    disponibles.RemoveAll(l => l.Id == parada.LugarId);
+                }
+
+                itinerarios.Add(itinerario);
+            }
+
+            await RellenarSugerenciasAsync(
+                itinerarios.SelectMany(i => i.Paradas),
+                nombres,
+                cancellationToken);
+
+            viaje.CambiarEstado(EstadoViaje.Planificado);
+
+            await _itinerarioRepository.ReemplazarAsync(viaje.Id, itinerarios, cancellationToken);
+
+            return itinerarios.Select(MapearRespuesta).ToList();
+        }
+        catch
+        {
+            try
+            {
+                viaje.CambiarEstado(estadoAnterior);
+                _viajeRepository.Actualizar(viaje);
+                await _viajeRepository.GuardarCambiosAsync(CancellationToken.None);
+            }
+            catch
+            {
+                // Ignorar error al revertir para no tapar la excepción original
+            }
+
+            throw;
+        }
     }
 
     private async Task<PerfilViajeroDto?> ObtenerPerfilSeguroAsync(CancellationToken cancellationToken)

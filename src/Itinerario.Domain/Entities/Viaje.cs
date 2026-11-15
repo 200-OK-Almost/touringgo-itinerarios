@@ -96,7 +96,10 @@ public class Viaje
 
         var transicionValida = (Estado, nuevoEstado) switch
         {
-            (EstadoViaje.Borrador, EstadoViaje.Planificado) => true,
+            (EstadoViaje.Borrador, EstadoViaje.EnPlanificacion) => true,
+            (EstadoViaje.EnPlanificacion, EstadoViaje.Planificado) => true,
+            (EstadoViaje.EnPlanificacion, EstadoViaje.Borrador) => true,
+            (EstadoViaje.Planificado, EstadoViaje.EnPlanificacion) => true,
             (EstadoViaje.Planificado, EstadoViaje.Finalizado) => true,
             _ => false
         };
