@@ -98,7 +98,7 @@ public class ViajesController : ControllerBase
     public async Task<ActionResult<IReadOnlyCollection<ItinerarioResponseDto>>> ObtenerItinerario(
         Guid id,
         CancellationToken cancellationToken)
-        => Ok(await _itinerarioService.ObtenerAsync(id, cancellationToken));
+        => Ok(await _itinerarioService.ObtenerAsync(id, _currentUser.UsuarioId, cancellationToken));
 
     [HttpPost("{id:guid}/refinar")]
     [ProducesResponseType(typeof(IReadOnlyCollection<ItinerarioResponseDto>), StatusCodes.Status200OK)]

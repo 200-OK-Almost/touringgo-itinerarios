@@ -231,10 +231,16 @@ public class ItinerarioService : IItinerarioService
 
     public async Task<IReadOnlyCollection<ItinerarioResponseDto>> ObtenerAsync(
         Guid viajeId,
+        Guid usuarioId,
         CancellationToken cancellationToken = default)
     {
-        _ = await _viajeRepository.ObtenerPorIdAsync(viajeId, cancellationToken)
+        var viaje = await _viajeRepository.ObtenerPorIdAsync(viajeId, cancellationToken)
             ?? throw new NotFoundException($"No se encontró el viaje con id {viajeId}.");
+
+        if (!viaje.EsMiembro(usuarioId))
+        {
+            throw new NotFoundException($"No se encontró el viaje con id {viajeId}.");
+        }
 
         var itinerarios = await _itinerarioRepository.ObtenerPorViajeAsync(viajeId, cancellationToken);
 
