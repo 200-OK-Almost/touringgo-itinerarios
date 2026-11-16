@@ -4,6 +4,7 @@ public static class CalculadoraDuracion
 {
     public const int MinimoDias = 1;
     public const int MaximoDias = 7;
+    public const string MensajeRangoInvalido = "El viaje puede durar entre 1 y 7 días.";
 
     public static int ContarDiasInclusivos(DateOnly fechaInicio, DateOnly fechaFin)
         => fechaFin.DayNumber - fechaInicio.DayNumber + 1;

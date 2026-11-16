@@ -1,5 +1,6 @@
 using FluentValidation;
 using Itinerario.Application.DTOs;
+using Itinerario.Application.Services;
 using Itinerario.Domain.Enums;
 
 namespace Itinerario.Application.Validators;
@@ -37,10 +38,39 @@ public class ViajeCreateDtoValidator : AbstractValidator<ViajeCreateDto>
             .Must(r => r is RitmoCaminata.Tranquilo or RitmoCaminata.Activo)
             .WithMessage("El ritmo de caminata solo puede ser Tranquilo o Activo.");
 
+        RuleFor(v => v.FechaInicio)
+            .NotNull()
+            .When(v => v.FechaFin.HasValue)
+            .WithMessage("Debe indicar la fecha de inicio y la fecha de fin.");
+
+        RuleFor(v => v.FechaFin)
+            .NotNull()
+            .When(v => v.FechaInicio.HasValue)
+            .WithMessage("Debe indicar la fecha de inicio y la fecha de fin.");
+
         RuleFor(v => v.FechaFin)
             .GreaterThanOrEqualTo(v => v.FechaInicio!.Value)
             .When(v => v.FechaInicio.HasValue && v.FechaFin.HasValue)
             .WithMessage("FechaFin no puede ser anterior a FechaInicio.");
+
+        RuleFor(v => v.FechaFin)
+            .Must((dto, fechaFin) =>
+            {
+                if (!dto.FechaInicio.HasValue || !fechaFin.HasValue)
+                {
+                    return true;
+                }
+
+                var dias = CalculadoraDuracion.ContarDiasInclusivos(
+                    dto.FechaInicio.Value,
+                    fechaFin.Value);
+
+                return CalculadoraDuracion.EsDuracionValida(dias);
+            })
+            .When(v => v.FechaInicio.HasValue
+                && v.FechaFin.HasValue
+                && v.FechaFin.Value >= v.FechaInicio.Value)
+            .WithMessage(CalculadoraDuracion.MensajeRangoInvalido);
 
         RuleFor(v => v.CategoriaCodigos)
             .Must(c => c is { Count: >= 2 and <= 4 })
