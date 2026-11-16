@@ -47,6 +47,32 @@ public class ViajeRepository : IViajeRepository
         return new ResultadoPaginado<Viaje>(items, total);
     }
 
+    public async Task<ResultadoPaginado<Viaje>> ObtenerPaginadoPorUsuarioAsync(
+        Guid usuarioId,
+        int pagina,
+        int tamano,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.Viajes
+            .Where(v => v.CreadoPorUsuarioId == usuarioId
+                || v.Miembros.Any(m => m.UsuarioId == usuarioId))
+            .Include(v => v.Etiquetas)
+            .Include(v => v.ParametrosFamilia)
+            .Include(v => v.Itinerarios)
+                .ThenInclude(i => i.Paradas)
+            .AsNoTracking();
+
+        var total = await query.CountAsync(cancellationToken);
+
+        var items = await query
+            .OrderByDescending(v => v.FechaCreacion)
+            .Skip((pagina - 1) * tamano)
+            .Take(tamano)
+            .ToListAsync(cancellationToken);
+
+        return new ResultadoPaginado<Viaje>(items, total);
+    }
+
     public Task<Viaje?> ObtenerPorCodigoInvitacionAsync(
         string codigoInvitacion,
         CancellationToken cancellationToken = default)
