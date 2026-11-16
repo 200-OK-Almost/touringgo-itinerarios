@@ -5,7 +5,6 @@ namespace Itinerario.Application.Interfaces;
 public interface IViajeRepository
 {
     Task<Viaje?> ObtenerPorIdAsync(Guid id, CancellationToken cancellationToken = default);
-    Task<ResultadoPaginado<Viaje>> ObtenerPaginadoAsync(int pagina, int tamano, CancellationToken cancellationToken = default);
     Task<ResultadoPaginado<Viaje>> ObtenerPaginadoPorUsuarioAsync(Guid usuarioId, int pagina, int tamano, CancellationToken cancellationToken = default);
     Task<Viaje?> ObtenerPorCodigoInvitacionAsync(string codigoInvitacion, CancellationToken cancellationToken = default);
     Task<bool> ExisteCodigoInvitacionAsync(string codigoInvitacion, CancellationToken cancellationToken = default);

@@ -53,10 +53,20 @@ public class ViajeService : IViajeService
         throw new InvalidOperationException("No se pudo generar un código de invitación único.");
     }
 
-    public async Task<ViajeResponseDto> ObtenerPorIdAsync(Guid id, CancellationToken cancellationToken = default)
-        => MapearRespuesta(await ObtenerEntidadAsync(id, cancellationToken));
+    public async Task<ViajeResponseDto> ObtenerPorIdAsync(Guid id, Guid usuarioId, CancellationToken cancellationToken = default)
+    {
+        var viaje = await ObtenerEntidadAsync(id, cancellationToken);
+
+        if (!viaje.EsMiembro(usuarioId))
+        {
+            throw new NotFoundException($"No se encontró el viaje con id {id}.");
+        }
+
+        return MapearRespuesta(viaje);
+    }
 
     public async Task<ResultadoPaginadoDto<ViajeResponseDto>> ObtenerTodosAsync(
+        Guid usuarioId,
         int pagina = 1,
         int tamano = 20,
         CancellationToken cancellationToken = default)
@@ -64,7 +74,8 @@ public class ViajeService : IViajeService
         var paginaNormalizada = pagina < 1 ? PaginaPorDefecto : pagina;
         var tamanoNormalizado = Math.Clamp(tamano, TamanoMinimo, TamanoMaximo);
 
-        var resultado = await _repository.ObtenerPaginadoAsync(paginaNormalizada, tamanoNormalizado, cancellationToken);
+        var resultado = await _repository.ObtenerPaginadoPorUsuarioAsync(
+            usuarioId, paginaNormalizada, tamanoNormalizado, cancellationToken);
 
         return new ResultadoPaginadoDto<ViajeResponseDto>
         {

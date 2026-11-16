@@ -52,13 +52,13 @@ public class ViajesController : ControllerBase
         [FromQuery] int pagina = 1,
         [FromQuery] int tamano = 20,
         CancellationToken cancellationToken = default)
-        => Ok(await _service.ObtenerTodosAsync(pagina, tamano, cancellationToken));
+        => Ok(await _service.ObtenerTodosAsync(_currentUser.UsuarioId, pagina, tamano, cancellationToken));
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ViajeResponseDto>> ObtenerPorId(
         Guid id,
         CancellationToken cancellationToken)
-        => Ok(await _service.ObtenerPorIdAsync(id, cancellationToken));
+        => Ok(await _service.ObtenerPorIdAsync(id, _currentUser.UsuarioId, cancellationToken));
 
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<ViajeResponseDto>> Actualizar(
