@@ -63,6 +63,8 @@ public class ItinerarioService : IItinerarioService
 
         try
         {
+            await CompletarCoordenadasHospedajeSiAplicaAsync(viaje, cancellationToken);
+
             var perfil = await ObtenerPerfilSeguroAsync(cancellationToken);
             var disponibles = await BuscarCandidatosAsync(viaje, perfil, cancellationToken);
             var nombres = disponibles.ToDictionary(l => l.Id, l => l.Nombre);
@@ -125,6 +127,27 @@ public class ItinerarioService : IItinerarioService
         }
     }
 
+    private async Task CompletarCoordenadasHospedajeSiAplicaAsync(Viaje viaje, CancellationToken cancellationToken)
+    {
+        if (EsTipoHospedaje(viaje.TipoPuntoPartida)
+            && viaje.LugarPartidaId.HasValue
+            && (!viaje.LatitudPartida.HasValue || !viaje.LongitudPartida.HasValue))
+        {
+            var lugar = await _lugaresClient.ObtenerPorIdAsync(viaje.LugarPartidaId.Value, cancellationToken);
+            if (lugar is not null)
+            {
+                viaje.LatitudPartida = lugar.Latitud;
+                viaje.LongitudPartida = lugar.Longitud;
+                viaje.NombrePuntoPartida ??= lugar.Nombre;
+                _viajeRepository.Actualizar(viaje);
+                await _viajeRepository.GuardarCambiosAsync(cancellationToken);
+            }
+        }
+    }
+
+    private static bool EsTipoHospedaje(TipoPuntoPartida tipo)
+        => tipo is TipoPuntoPartida.HospedajePropio or TipoPuntoPartida.HospedajeSugerido;
+
     private async Task<PerfilViajeroDto?> ObtenerPerfilSeguroAsync(CancellationToken cancellationToken)
     {
         try
@@ -147,7 +170,10 @@ public class ItinerarioService : IItinerarioService
             var intencion = ConstruirIntencion(viaje, perfil);
             var semanticos = await _lugaresClient.BuscarSemanticoAsync(intencion, 20, cancellationToken);
 
-            var delBarrio = semanticos.Where(l => l.Barrio == viaje.Barrio).ToList();
+            var delBarrio = semanticos
+                .Where(l => l.Barrio == viaje.Barrio)
+                .Where(l => l.Id != viaje.LugarPartidaId) // filtrar el lugar de partida
+                .ToList();
             if (delBarrio.Count >= 2)
             {
                 return delBarrio;

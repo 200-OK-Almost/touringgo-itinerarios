@@ -17,14 +17,18 @@ public class ViajeService : IViajeService
     private const int TamanoMaximo = 100;
 
     private readonly IViajeRepository _repository;
+    private readonly ILugaresClient _lugaresClient;
 
-    public ViajeService(IViajeRepository repository)
+    public ViajeService(IViajeRepository repository, ILugaresClient lugaresClient)
     {
         _repository = repository;
+        _lugaresClient = lugaresClient;
     }
 
     public async Task<ViajeResponseDto> CrearAsync(ViajeCreateDto dto, Guid creadoPorUsuarioId, CancellationToken cancellationToken = default)
     {
+        await CompletarCoordenadasHospedajeSiAplicaAsync(dto, cancellationToken);
+
         for (var intento = 0; intento < MaxIntentosCodigo; intento++)
         {
             var codigoInvitacion = await GenerarCodigoInvitacionUnicoAsync(cancellationToken);
@@ -99,6 +103,8 @@ public class ViajeService : IViajeService
             throw new AccesoDenegadoException("Solo un administrador del viaje puede modificarlo.");
         }
 
+        await CompletarCoordenadasHospedajeSiAplicaAsync(dto, cancellationToken);
+
         viaje.ActualizarDatos(MapearDatos(dto));
         viaje.CambiarEstado(dto.Estado);
 
@@ -168,6 +174,41 @@ public class ViajeService : IViajeService
 
         throw new InvalidOperationException("No se pudo generar un código de invitación único.");
     }
+
+    private async Task CompletarCoordenadasHospedajeSiAplicaAsync(ViajeCreateDto dto, CancellationToken cancellationToken)
+    {
+        if (EsTipoHospedaje(dto.TipoPuntoPartida)
+            && dto.LugarPartidaId.HasValue
+            && (!dto.LatitudPartida.HasValue || !dto.LongitudPartida.HasValue))
+        {
+            var lugar = await _lugaresClient.ObtenerPorIdAsync(dto.LugarPartidaId.Value, cancellationToken);
+            if (lugar is not null)
+            {
+                dto.LatitudPartida = lugar.Latitud;
+                dto.LongitudPartida = lugar.Longitud;
+                dto.NombrePuntoPartida ??= lugar.Nombre;
+            }
+        }
+    }
+
+    private async Task CompletarCoordenadasHospedajeSiAplicaAsync(ViajeUpdateDto dto, CancellationToken cancellationToken)
+    {
+        if (EsTipoHospedaje(dto.TipoPuntoPartida)
+            && dto.LugarPartidaId.HasValue
+            && (!dto.LatitudPartida.HasValue || !dto.LongitudPartida.HasValue))
+        {
+            var lugar = await _lugaresClient.ObtenerPorIdAsync(dto.LugarPartidaId.Value, cancellationToken);
+            if (lugar is not null)
+            {
+                dto.LatitudPartida = lugar.Latitud;
+                dto.LongitudPartida = lugar.Longitud;
+                dto.NombrePuntoPartida ??= lugar.Nombre;
+            }
+        }
+    }
+
+    private static bool EsTipoHospedaje(TipoPuntoPartida tipo)
+        => tipo is TipoPuntoPartida.HospedajePropio or TipoPuntoPartida.HospedajeSugerido;
 
     private static DatosViaje MapearDatos(ViajeCreateDto dto) => new(
         dto.Titulo,
