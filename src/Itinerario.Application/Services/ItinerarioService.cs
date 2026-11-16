@@ -69,7 +69,7 @@ public class ItinerarioService : IItinerarioService
 
             var itinerarios = new List<ItinerarioEntity>();
 
-            foreach (var dia in CalcularDias(viaje))
+            foreach (var dia in PlanificadorDias.Calcular(viaje.FechaInicio, viaje.FechaFin))
             {
                 var paradas = _generator.Generar(viaje, disponibles).ToList();
 
@@ -387,23 +387,6 @@ public class ItinerarioService : IItinerarioService
     private static bool DentroDePresupuesto(NivelPresupuesto candidato, NivelPresupuesto tope)
         => candidato <= tope;
 
-    private static IReadOnlyList<DiaPlanificado> CalcularDias(Viaje viaje)
-    {
-        if (viaje.FechaInicio is null || viaje.FechaFin is null || viaje.FechaFin < viaje.FechaInicio)
-        {
-            return new[] { new DiaPlanificado(1, viaje.FechaInicio) };
-        }
-
-        var dias = new List<DiaPlanificado>();
-
-        for (var fecha = viaje.FechaInicio.Value; fecha <= viaje.FechaFin.Value; fecha = fecha.AddDays(1))
-        {
-            dias.Add(new DiaPlanificado((short)(dias.Count + 1), fecha));
-        }
-
-        return dias;
-    }
-
     private static ItinerarioResponseDto MapearRespuesta(ItinerarioEntity itinerario) => new()
     {
         Id = itinerario.Id,
@@ -436,6 +419,4 @@ public class ItinerarioService : IItinerarioService
         SugerenciaIa = parada.SugerenciaIa,
         NotasPersonales = parada.NotasPersonales
     };
-
-    private sealed record DiaPlanificado(short NumeroDia, DateOnly? Fecha);
 }
