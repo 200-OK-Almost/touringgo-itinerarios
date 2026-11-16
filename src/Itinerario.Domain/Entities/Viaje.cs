@@ -116,6 +116,9 @@ public class Viaje
     public bool EsAdministrador(Guid usuarioId)
         => Miembros.Any(m => m.UsuarioId == usuarioId && m.Rol == RolMiembro.Administrador);
 
+    public bool EsMiembro(Guid usuarioId)
+        => Miembros.Any(m => m.UsuarioId == usuarioId);
+
     public void AgregarMiembro(Guid usuarioId, RolMiembro rol)
     {
         if (Miembros.All(m => m.UsuarioId != usuarioId))

@@ -52,13 +52,13 @@ public class ViajesController : ControllerBase
         [FromQuery] int pagina = 1,
         [FromQuery] int tamano = 20,
         CancellationToken cancellationToken = default)
-        => Ok(await _service.ObtenerTodosAsync(pagina, tamano, cancellationToken));
+        => Ok(await _service.ObtenerTodosAsync(_currentUser.UsuarioId, pagina, tamano, cancellationToken));
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ViajeResponseDto>> ObtenerPorId(
         Guid id,
         CancellationToken cancellationToken)
-        => Ok(await _service.ObtenerPorIdAsync(id, cancellationToken));
+        => Ok(await _service.ObtenerPorIdAsync(id, _currentUser.UsuarioId, cancellationToken));
 
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<ViajeResponseDto>> Actualizar(
@@ -98,7 +98,7 @@ public class ViajesController : ControllerBase
     public async Task<ActionResult<IReadOnlyCollection<ItinerarioResponseDto>>> ObtenerItinerario(
         Guid id,
         CancellationToken cancellationToken)
-        => Ok(await _itinerarioService.ObtenerAsync(id, cancellationToken));
+        => Ok(await _itinerarioService.ObtenerAsync(id, _currentUser.UsuarioId, cancellationToken));
 
     [HttpPost("{id:guid}/refinar")]
     [ProducesResponseType(typeof(IReadOnlyCollection<ItinerarioResponseDto>), StatusCodes.Status200OK)]

@@ -26,14 +26,19 @@ public class ViajeRepository : IViajeRepository
                 .ThenInclude(i => i.Paradas)
             .FirstOrDefaultAsync(v => v.Id == id, cancellationToken);
 
-    public async Task<ResultadoPaginado<Viaje>> ObtenerPaginadoAsync(
+    public async Task<ResultadoPaginado<Viaje>> ObtenerPaginadoPorUsuarioAsync(
+        Guid usuarioId,
         int pagina,
         int tamano,
         CancellationToken cancellationToken = default)
     {
         var query = _context.Viajes
+            .Where(v => v.CreadoPorUsuarioId == usuarioId
+                || v.Miembros.Any(m => m.UsuarioId == usuarioId))
             .Include(v => v.Etiquetas)
             .Include(v => v.ParametrosFamilia)
+            .Include(v => v.Itinerarios)
+                .ThenInclude(i => i.Paradas)
             .AsNoTracking();
 
         var total = await query.CountAsync(cancellationToken);
