@@ -362,12 +362,39 @@ public class ItinerarioService : IItinerarioService
         var (viaje, itinerarios) = await PrepararModificacionAsync(
             viajeId, numeroDia, usuarioIdSolicitante, cancellationToken);
 
-        var lugares = await BuscarLugaresAsync(viaje, cancellationToken);
-        var lugaresActuales = ConstruirLugaresActuales(itinerarios, lugares);
-        var disponibles = ConstruirDisponibles(itinerarios, lugares, viaje);
+        var diasPorNumero = ObtenerDias(viaje).ToDictionary(d => d.NumeroDia);
+        var lugaresPorBarrio = new Dictionary<BarrioCaba, IReadOnlyCollection<LugarCandidatoDto>>();
 
         foreach (var itinerario in itinerarios)
         {
+            var dia = ObtenerDiaConfig(viaje, diasPorNumero, itinerario.NumeroDia);
+
+            if (!lugaresPorBarrio.ContainsKey(dia.Barrio))
+            {
+                lugaresPorBarrio[dia.Barrio] = await BuscarLugaresAsync(
+                    viaje,
+                    dia.Barrio,
+                    cancellationToken);
+            }
+        }
+
+        var lugaresActuales = ConstruirLugaresActuales(
+            itinerarios,
+            lugaresPorBarrio.Values.SelectMany(lugares => lugares).ToList());
+
+        var puntosPartida = diasPorNumero.Values
+            .Where(dia => dia.LugarPartidaId.HasValue)
+            .Select(dia => dia.LugarPartidaId!.Value)
+            .ToHashSet();
+
+        foreach (var itinerario in itinerarios)
+        {
+            var dia = ObtenerDiaConfig(viaje, diasPorNumero, itinerario.NumeroDia);
+            var lugaresDia = lugaresPorBarrio[dia.Barrio];
+            var disponibles = ConstruirDisponibles(itinerarios, lugaresDia, viaje)
+                .Where(lugar => !puntosPartida.Contains(lugar.Id))
+                .ToList();
+
             _refiner.Refinar(tipo, itinerario, lugaresActuales, disponibles, viaje);
         }
 
@@ -398,17 +425,28 @@ public class ItinerarioService : IItinerarioService
             viajeId, numeroDia, usuarioIdSolicitante, cancellationToken);
 
         var perfil = await ObtenerPerfilSeguroAsync(cancellationToken);
-        var lugares = await BuscarCandidatosAsync(
-            viaje,
-            perfil,
-            viaje.Barrio,
-            viaje.LugarPartidaId,
-            cancellationToken);
-        var disponibles = ConstruirDisponibles(itinerarios, lugares, viaje);
+        var diasPorNumero = ObtenerDias(viaje).ToDictionary(d => d.NumeroDia);
+        var candidatosPorDia = new Dictionary<(BarrioCaba Barrio, Guid? LugarPartidaId), List<LugarCandidatoDto>>();
 
         foreach (var itinerario in itinerarios)
         {
+            var dia = ObtenerDiaConfig(viaje, diasPorNumero, itinerario.NumeroDia);
+            var clave = (dia.Barrio, dia.LugarPartidaId);
+
+            if (!candidatosPorDia.TryGetValue(clave, out var lugares))
+            {
+                lugares = await BuscarCandidatosAsync(
+                    viaje,
+                    perfil,
+                    dia.Barrio,
+                    dia.LugarPartidaId,
+                    cancellationToken);
+                candidatosPorDia[clave] = lugares;
+            }
+
+            var disponibles = ConstruirDisponibles(itinerarios, lugares, viaje);
             var sugerencias = _refiner.SugerirTurnosLibres(itinerario, disponibles, viaje);
+
             foreach (var sugerencia in sugerencias)
             {
                 _itinerarioRepository.AgregarParada(sugerencia);
@@ -453,10 +491,37 @@ public class ItinerarioService : IItinerarioService
         return (viaje, destino);
     }
 
-    private Task<IReadOnlyCollection<LugarCandidatoDto>> BuscarLugaresAsync(Viaje viaje, CancellationToken cancellationToken)
+    private Task<IReadOnlyCollection<LugarCandidatoDto>> BuscarLugaresAsync(
+        Viaje viaje,
+        BarrioCaba barrio,
+        CancellationToken cancellationToken)
     {
         var categoriaCodigos = viaje.Etiquetas.Select(e => e.CategoriaCodigo).ToList();
-        return _lugaresClient.BuscarAsync(viaje.Barrio, categoriaCodigos, cancellationToken);
+        return _lugaresClient.BuscarAsync(barrio, categoriaCodigos, cancellationToken);
+    }
+
+    private static ViajeDia ObtenerDiaConfig(
+        Viaje viaje,
+        IReadOnlyDictionary<short, ViajeDia> diasPorNumero,
+        short numeroDia)
+    {
+        if (diasPorNumero.TryGetValue(numeroDia, out var dia))
+        {
+            return dia;
+        }
+
+        return new ViajeDia
+        {
+            ViajeId = viaje.Id,
+            NumeroDia = numeroDia,
+            Barrio = viaje.Barrio,
+            TipoPuntoPartida = viaje.TipoPuntoPartida,
+            LugarPartidaId = viaje.LugarPartidaId,
+            NombrePuntoPartida = viaje.NombrePuntoPartida,
+            DireccionPartida = viaje.DireccionPartida,
+            LatitudPartida = viaje.LatitudPartida,
+            LongitudPartida = viaje.LongitudPartida
+        };
     }
 
     private static IReadOnlyDictionary<Guid, LugarCandidatoDto> ConstruirLugaresActuales(
