@@ -66,14 +66,33 @@ public class ItinerarioService : IItinerarioService
             await CompletarCoordenadasHospedajeSiAplicaAsync(viaje, cancellationToken);
 
             var perfil = await ObtenerPerfilSeguroAsync(cancellationToken);
-            var disponibles = await BuscarCandidatosAsync(viaje, perfil, cancellationToken);
-            var nombres = disponibles.ToDictionary(l => l.Id, l => l.Nombre);
-
+            var nombres = new Dictionary<Guid, string>();
+            var usados = new HashSet<Guid>();
             var itinerarios = new List<ItinerarioEntity>();
 
-            foreach (var dia in PlanificadorDias.Calcular(viaje.FechaInicio, viaje.FechaFin))
+            foreach (var dia in ObtenerDias(viaje))
             {
-                var paradas = _generator.Generar(viaje, disponibles).ToList();
+                var candidatos = await BuscarCandidatosAsync(
+                    viaje,
+                    perfil,
+                    dia.Barrio,
+                    dia.LugarPartidaId,
+                    cancellationToken);
+
+                foreach (var candidato in candidatos)
+                {
+                    nombres[candidato.Id] = candidato.Nombre;
+                }
+
+                var disponibles = candidatos
+                    .Where(l => !usados.Contains(l.Id))
+                    .ToList();
+
+                var paradas = _generator.Generar(
+                    viaje,
+                    disponibles,
+                    dia.LatitudPartida,
+                    dia.LongitudPartida).ToList();
 
                 var itinerario = new ItinerarioEntity
                 {
@@ -81,10 +100,10 @@ public class ItinerarioService : IItinerarioService
                     ViajeId = viaje.Id,
                     NumeroDia = dia.NumeroDia,
                     Fecha = dia.Fecha,
-                    OrigenTipo = viaje.TipoPuntoPartida,
-                    OrigenDescripcion = viaje.NombrePuntoPartida ?? viaje.DireccionPartida,
-                    OrigenLatitud = viaje.LatitudPartida,
-                    OrigenLongitud = viaje.LongitudPartida,
+                    OrigenTipo = dia.TipoPuntoPartida,
+                    OrigenDescripcion = dia.NombrePuntoPartida ?? dia.DireccionPartida,
+                    OrigenLatitud = dia.LatitudPartida,
+                    OrigenLongitud = dia.LongitudPartida,
                     FechaCreacion = DateTimeOffset.UtcNow,
                     FechaActualizacion = DateTimeOffset.UtcNow,
                     Paradas = paradas
@@ -93,7 +112,7 @@ public class ItinerarioService : IItinerarioService
                 foreach (var parada in paradas)
                 {
                     parada.ItinerarioId = itinerario.Id;
-                    disponibles.RemoveAll(l => l.Id == parada.LugarId);
+                    usados.Add(parada.LugarId);
                 }
 
                 itinerarios.Add(itinerario);
@@ -143,6 +162,28 @@ public class ItinerarioService : IItinerarioService
                 await _viajeRepository.GuardarCambiosAsync(cancellationToken);
             }
         }
+
+        foreach (var dia in viaje.Dias)
+        {
+            if (!EsTipoHospedaje(dia.TipoPuntoPartida)
+                || !dia.LugarPartidaId.HasValue
+                || (dia.LatitudPartida.HasValue && dia.LongitudPartida.HasValue))
+            {
+                continue;
+            }
+
+            var lugar = await _lugaresClient.ObtenerPorIdAsync(dia.LugarPartidaId.Value, cancellationToken);
+            if (lugar is null)
+            {
+                continue;
+            }
+
+            dia.LatitudPartida = lugar.Latitud;
+            dia.LongitudPartida = lugar.Longitud;
+            dia.NombrePuntoPartida ??= lugar.Nombre;
+            _viajeRepository.Actualizar(viaje);
+            await _viajeRepository.GuardarCambiosAsync(cancellationToken);
+        }
     }
 
     private static bool EsTipoHospedaje(TipoPuntoPartida tipo)
@@ -160,19 +201,47 @@ public class ItinerarioService : IItinerarioService
         }
     }
 
+    private static IReadOnlyList<ViajeDia> ObtenerDias(Viaje viaje)
+    {
+        if (viaje.Dias.Count > 0)
+        {
+            return viaje.Dias
+                .OrderBy(d => d.NumeroDia)
+                .ToList();
+        }
+
+        return PlanificadorDias.Calcular(viaje.FechaInicio, viaje.FechaFin)
+            .Select(dia => new ViajeDia
+            {
+                ViajeId = viaje.Id,
+                NumeroDia = dia.NumeroDia,
+                Fecha = dia.Fecha,
+                Barrio = viaje.Barrio,
+                TipoPuntoPartida = viaje.TipoPuntoPartida,
+                LugarPartidaId = viaje.LugarPartidaId,
+                NombrePuntoPartida = viaje.NombrePuntoPartida,
+                DireccionPartida = viaje.DireccionPartida,
+                LatitudPartida = viaje.LatitudPartida,
+                LongitudPartida = viaje.LongitudPartida
+            })
+            .ToList();
+    }
+
     private async Task<List<LugarCandidatoDto>> BuscarCandidatosAsync(
         Viaje viaje,
         PerfilViajeroDto? perfil,
+        BarrioCaba barrio,
+        Guid? lugarPartidaId,
         CancellationToken cancellationToken)
     {
         try
         {
-            var intencion = ConstruirIntencion(viaje, perfil);
+            var intencion = ConstruirIntencion(viaje, perfil, barrio);
             var semanticos = await _lugaresClient.BuscarSemanticoAsync(intencion, 20, cancellationToken);
 
             var delBarrio = semanticos
-                .Where(l => l.Barrio == viaje.Barrio)
-                .Where(l => l.Id != viaje.LugarPartidaId) // filtrar el lugar de partida
+                .Where(l => l.Barrio == barrio)
+                .Where(l => l.Id != lugarPartidaId) // filtrar el lugar de partida
                 .ToList();
             if (delBarrio.Count >= 2)
             {
@@ -185,8 +254,10 @@ public class ItinerarioService : IItinerarioService
         }
 
         var categoriaCodigos = viaje.Etiquetas.Select(e => e.CategoriaCodigo).ToList();
-        var categoricos = await _lugaresClient.BuscarAsync(viaje.Barrio, categoriaCodigos, cancellationToken);
-        return categoricos.ToList();
+        var categoricos = await _lugaresClient.BuscarAsync(barrio, categoriaCodigos, cancellationToken);
+        return categoricos
+            .Where(l => l.Id != lugarPartidaId)
+            .ToList();
     }
 
     private async Task RellenarSugerenciasAsync(
@@ -211,7 +282,10 @@ public class ItinerarioService : IItinerarioService
         }
     }
 
-    private static string ConstruirIntencion(Viaje viaje, PerfilViajeroDto? perfil)
+    private static string ConstruirIntencion(
+        Viaje viaje,
+        PerfilViajeroDto? perfil,
+        BarrioCaba barrio)
     {
         var categorias = viaje.Etiquetas
             .Select(e => NombreCategoria(e.CategoriaCodigo))
@@ -219,7 +293,7 @@ public class ItinerarioService : IItinerarioService
             .Cast<string>()
             .ToList();
 
-        var partes = new List<string> { $"Lugares en {viaje.Barrio}" };
+        var partes = new List<string> { $"Lugares en {barrio}" };
         if (categorias.Count > 0)
         {
             partes.Add($"de tipo {string.Join(", ", categorias)}");
@@ -324,7 +398,12 @@ public class ItinerarioService : IItinerarioService
             viajeId, numeroDia, usuarioIdSolicitante, cancellationToken);
 
         var perfil = await ObtenerPerfilSeguroAsync(cancellationToken);
-        var lugares = await BuscarCandidatosAsync(viaje, perfil, cancellationToken);
+        var lugares = await BuscarCandidatosAsync(
+            viaje,
+            perfil,
+            viaje.Barrio,
+            viaje.LugarPartidaId,
+            cancellationToken);
         var disponibles = ConstruirDisponibles(itinerarios, lugares, viaje);
 
         foreach (var itinerario in itinerarios)

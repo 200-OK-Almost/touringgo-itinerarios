@@ -23,7 +23,9 @@ public class ItinerarioGenerator : IItinerarioGenerator
     // El turno se asigna por orden en el recorrido, no por el turno del lugar (limitación v1).
     public IReadOnlyCollection<ParadaItinerario> Generar(
         Viaje viaje,
-        IReadOnlyCollection<LugarCandidatoDto> lugares)
+        IReadOnlyCollection<LugarCandidatoDto> lugares,
+        decimal? latitudPartida = null,
+        decimal? longitudPartida = null)
     {
         var turnos = TurnosSegunAlcance(viaje.AlcanceTemporal);
 
@@ -46,8 +48,8 @@ public class ItinerarioGenerator : IItinerarioGenerator
         var ordenPorTurno = new Dictionary<Turno, short>();
         var minutoPorTurno = new Dictionary<Turno, int>();
 
-        double? latAnterior = (double?)viaje.LatitudPartida;
-        double? lonAnterior = (double?)viaje.LongitudPartida;
+        double? latAnterior = (double?)(latitudPartida ?? viaje.LatitudPartida);
+        double? lonAnterior = (double?)(longitudPartida ?? viaje.LongitudPartida);
         Turno? turnoAnterior = null;
 
         for (var i = 0; i < objetivo; i++)

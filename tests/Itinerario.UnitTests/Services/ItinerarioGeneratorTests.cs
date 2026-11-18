@@ -97,6 +97,22 @@ public class ItinerarioGeneratorTests
     }
 
     [Fact]
+    public void Generar_UsaElOrigenDelDia_SiSeProporciona()
+    {
+        var viaje = CrearViaje(limiteCuadras: 4);
+        var lugares = new[]
+        {
+            CrearLugar(),
+            CrearLugar()
+        };
+
+        var paradas = CrearGenerator(metrosEntreLugares: 500)
+            .Generar(viaje, lugares, -34.58m, -58.42m);
+
+        Assert.Empty(paradas);
+    }
+
+    [Fact]
     public void Generar_ConLimiteDeCuadrasSuficiente_GeneraParadas()
     {
         var viaje = CrearViaje(
