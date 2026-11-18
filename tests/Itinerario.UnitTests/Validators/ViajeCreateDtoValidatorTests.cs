@@ -86,6 +86,85 @@ public class ViajeCreateDtoValidatorTests
         Assert.True(resultado.IsValid, Mensajes(resultado));
     }
 
+    [Fact]
+    public void DiasValidos_ConRangoCoincidente_EsValido()
+    {
+        var dto = CrearDto(Inicio, Inicio.AddDays(2));
+        dto.Dias = CrearDias(Inicio, 3);
+
+        var resultado = _validator.Validate(dto);
+
+        Assert.True(resultado.IsValid, Mensajes(resultado));
+    }
+
+    [Fact]
+    public void DiasQueNoCoincidenConElRango_EsInvalido()
+    {
+        var dto = CrearDto(Inicio, Inicio.AddDays(2));
+        dto.Dias = CrearDias(Inicio.AddDays(1), 3);
+
+        var resultado = _validator.Validate(dto);
+
+        Assert.False(resultado.IsValid);
+        Assert.Contains(
+            resultado.Errors,
+            error => error.ErrorMessage == "Los días deben coincidir con el rango de fechas del viaje.");
+    }
+
+    [Fact]
+    public void MasDeSieteDias_EsInvalido()
+    {
+        var dto = CrearDto(Inicio, Inicio.AddDays(7));
+        dto.Dias = CrearDias(Inicio, 8);
+
+        var resultado = _validator.Validate(dto);
+
+        Assert.False(resultado.IsValid);
+        Assert.Contains(
+            resultado.Errors,
+            error => error.ErrorMessage == CalculadoraDuracion.MensajeRangoInvalido);
+    }
+
+    [Fact]
+    public void DiaConHospedajeSinLugar_EsInvalido()
+    {
+        var dto = CrearDto(Inicio, Inicio);
+        dto.Dias = CrearDias(Inicio, 1);
+        dto.Dias.First().TipoPuntoPartida = TipoPuntoPartida.HospedajePropio;
+
+        var resultado = _validator.Validate(dto);
+
+        Assert.False(resultado.IsValid);
+        Assert.Contains(
+            resultado.Errors,
+            error => error.ErrorMessage == "Seleccioná un lugar de alojamiento para el día.");
+    }
+
+    [Fact]
+    public void DiasSinFechasDelViaje_EsInvalido()
+    {
+        var dto = CrearDto(null, null);
+        dto.Dias = CrearDias(Inicio, 1);
+
+        var resultado = _validator.Validate(dto);
+
+        Assert.False(resultado.IsValid);
+        Assert.Contains(
+            resultado.Errors,
+            error => error.ErrorMessage == "Debe indicar la fecha de inicio y la fecha de fin.");
+    }
+
+    private static IReadOnlyCollection<ViajeDiaCreateDto> CrearDias(DateOnly inicio, int cantidad)
+        => Enumerable.Range(0, cantidad)
+            .Select(indice => new ViajeDiaCreateDto
+            {
+                NumeroDia = (short)(indice + 1),
+                Fecha = inicio.AddDays(indice),
+                Barrio = BarrioCaba.Palermo,
+                TipoPuntoPartida = TipoPuntoPartida.NodoUrbano
+            })
+            .ToList();
+
     private static ViajeCreateDto CrearDto(DateOnly? fechaInicio, DateOnly? fechaFin)
         => new()
         {

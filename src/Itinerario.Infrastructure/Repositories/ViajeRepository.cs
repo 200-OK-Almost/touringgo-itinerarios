@@ -22,6 +22,7 @@ public class ViajeRepository : IViajeRepository
             .Include(v => v.Miembros)
             .Include(v => v.Etiquetas)
             .Include(v => v.ParametrosFamilia)
+            .Include(v => v.Dias)
             .Include(v => v.Itinerarios)
                 .ThenInclude(i => i.Paradas)
             .FirstOrDefaultAsync(v => v.Id == id, cancellationToken);
@@ -37,6 +38,7 @@ public class ViajeRepository : IViajeRepository
                 || v.Miembros.Any(m => m.UsuarioId == usuarioId))
             .Include(v => v.Etiquetas)
             .Include(v => v.ParametrosFamilia)
+            .Include(v => v.Dias)
             .Include(v => v.Itinerarios)
                 .ThenInclude(i => i.Paradas)
             .AsNoTracking();
@@ -57,6 +59,7 @@ public class ViajeRepository : IViajeRepository
         CancellationToken cancellationToken = default)
         => _context.Viajes
             .Include(v => v.Miembros)
+            .Include(v => v.Dias)
             .FirstOrDefaultAsync(v => v.CodigoInvitacion == codigoInvitacion, cancellationToken);
 
     public Task<bool> ExisteCodigoInvitacionAsync(
@@ -96,6 +99,37 @@ public class ViajeRepository : IViajeRepository
             var nueva = new EtiquetaViaje { ViajeId = viaje.Id, CategoriaCodigo = categoriaCodigo };
             viaje.Etiquetas.Add(nueva);
             _context.EtiquetasViaje.Add(nueva);
+        }
+    }
+
+    public void SincronizarDias(Viaje viaje, IReadOnlyCollection<ViajeDia> dias)
+    {
+        var deseadosPorNumero = dias.ToDictionary(d => d.NumeroDia);
+
+        foreach (var actual in viaje.Dias.ToList())
+        {
+            if (!deseadosPorNumero.Remove(actual.NumeroDia, out var deseado))
+            {
+                viaje.Dias.Remove(actual);
+                _context.ViajeDias.Remove(actual);
+                continue;
+            }
+
+            actual.Fecha = deseado.Fecha;
+            actual.Barrio = deseado.Barrio;
+            actual.TipoPuntoPartida = deseado.TipoPuntoPartida;
+            actual.LugarPartidaId = deseado.LugarPartidaId;
+            actual.NombrePuntoPartida = deseado.NombrePuntoPartida;
+            actual.DireccionPartida = deseado.DireccionPartida;
+            actual.LatitudPartida = deseado.LatitudPartida;
+            actual.LongitudPartida = deseado.LongitudPartida;
+        }
+
+        foreach (var nuevo in deseadosPorNumero.Values)
+        {
+            nuevo.ViajeId = viaje.Id;
+            viaje.Dias.Add(nuevo);
+            _context.ViajeDias.Add(nuevo);
         }
     }
 
