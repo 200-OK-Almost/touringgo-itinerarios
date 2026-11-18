@@ -18,6 +18,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<EtiquetaViaje> EtiquetasViaje => Set<EtiquetaViaje>();
     public DbSet<ItinerarioEntity> Itinerarios => Set<ItinerarioEntity>();
     public DbSet<ParadaItinerario> ParadasItinerario => Set<ParadaItinerario>();
+    public DbSet<ViajeDia> ViajeDias => Set<ViajeDia>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

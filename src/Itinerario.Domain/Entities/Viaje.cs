@@ -31,6 +31,7 @@ public class Viaje
     public ICollection<MiembroViaje> Miembros { get; set; } = new List<MiembroViaje>();
     public ICollection<EtiquetaViaje> Etiquetas { get; set; } = new List<EtiquetaViaje>();
     public ICollection<Itinerario> Itinerarios { get; set; } = new List<Itinerario>();
+    public ICollection<ViajeDia> Dias { get; set; } = new List<ViajeDia>();
 
     public static Viaje Crear(
         Guid id,
