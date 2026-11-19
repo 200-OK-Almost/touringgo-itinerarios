@@ -37,6 +37,9 @@ public class ItinerarioServiceTests
             parada => Assert.Contains(parada.LugarId, idsRecoleta));
         Assert.Contains(BarrioCaba.Palermo, lugares.BarriosSolicitados);
         Assert.Contains(BarrioCaba.Recoleta, lugares.BarriosSolicitados);
+        Assert.All(
+            lugares.Solicitudes,
+            solicitud => Assert.Contains("cafe_especialidad", solicitud.Categorias));
     }
 
     [Fact]
@@ -85,6 +88,9 @@ public class ItinerarioServiceTests
             resultado.SelectMany(itinerario => itinerario.Paradas),
             parada => Assert.Contains(parada.LugarId, idsPalermo));
         Assert.DoesNotContain(BarrioCaba.Recoleta, lugares.BarriosSolicitados);
+        Assert.All(
+            lugares.Solicitudes,
+            solicitud => Assert.Contains("cafe_especialidad", solicitud.Categorias));
     }
 
     [Fact]
@@ -111,6 +117,9 @@ public class ItinerarioServiceTests
 
         Assert.Contains(BarrioCaba.Palermo, lugares.BarriosSolicitados);
         Assert.Contains(BarrioCaba.Recoleta, lugares.BarriosSolicitados);
+        Assert.All(
+            lugares.Solicitudes,
+            solicitud => Assert.Contains("cafe_especialidad", solicitud.Categorias));
     }
 
     [Fact]
