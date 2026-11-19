@@ -131,6 +131,35 @@ public class LugaresClientTests
         Assert.Equal(new[] { "parques_aire_libre" }, unico.Categorias);
     }
 
+    [Fact]
+    public async Task ObtenerPorIdAsync_MapeaCategoriasDelDetalle()
+    {
+        var handler = new FakeHandler(_ => JsonResponse(
+            """
+            {
+              "id": "11111111-1111-1111-1111-111111111101",
+              "nombre": "Café Lattente",
+              "barrio": "Palermo",
+              "latitud": -34.5885,
+              "longitud": -58.4282,
+              "duracionEstimadaMinutos": 45,
+              "nivelPrecio": 1,
+              "esAlAireLibre": true,
+              "categorias": [
+                { "id": 1, "codigo": "cafe_especialidad", "nombre": "Café de especialidad" }
+              ]
+            }
+            """));
+
+        var client = new LugaresClient(new HttpClient(handler) { BaseAddress = new Uri("http://test") });
+
+        var lugar = await client.ObtenerPorIdAsync(Guid.NewGuid());
+
+        Assert.NotNull(lugar);
+        Assert.Equal("Café Lattente", lugar!.Nombre);
+        Assert.Equal(new[] { "cafe_especialidad" }, lugar.Categorias);
+    }
+
     private static HttpResponseMessage JsonResponse(string json)
         => new(HttpStatusCode.OK)
         {

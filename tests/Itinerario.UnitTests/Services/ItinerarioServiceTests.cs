@@ -69,6 +69,47 @@ public class ItinerarioServiceTests
     }
 
     [Fact]
+    public async Task GenerarAsync_RespetaLasReglasHorariasDeCadaTurno()
+    {
+        var viaje = CrearViajeConDias((BarrioCaba.Palermo, Inicio));
+        AgregarCategoriasDia(
+            viaje,
+            1,
+            "cafe_especialidad",
+            "gastronomia_clasica",
+            "bares_vermu",
+            "cocteleria_autor");
+
+        var cafe = CrearLugarConCategoria("cafe_especialidad");
+        var restaurante = CrearLugarConCategoria("gastronomia_clasica");
+        var bar = CrearLugarConCategoria("bares_vermu");
+        var cocteleria = CrearLugarConCategoria("cocteleria_autor");
+
+        var lugares = new LugaresClientFalso();
+        lugares.EstablecerLugares(
+            BarrioCaba.Palermo,
+            cafe,
+            restaurante,
+            bar,
+            cocteleria);
+
+        var service = CrearService(viaje, lugares, new ItinerarioRepositoryFalso());
+
+        var resultado = await service.GenerarAsync(viaje.Id, viaje.CreadoPorUsuarioId);
+        var paradas = resultado.Single().Paradas.ToList();
+
+        Assert.Equal(4, paradas.Count);
+        Assert.Equal(Turno.Manana, paradas[0].Turno);
+        Assert.Equal(cafe.Id, paradas[0].LugarId);
+        Assert.Equal(Turno.Mediodia, paradas[1].Turno);
+        Assert.Equal(restaurante.Id, paradas[1].LugarId);
+        Assert.Equal(Turno.Tarde, paradas[2].Turno);
+        Assert.Equal(bar.Id, paradas[2].LugarId);
+        Assert.Equal(Turno.Noche, paradas[3].Turno);
+        Assert.Equal(cocteleria.Id, paradas[3].LugarId);
+    }
+
+    [Fact]
     public async Task GenerarAsync_SinDias_UsaElBarrioDelViaje()
     {
         var viaje = CrearViajeConDias(
@@ -262,6 +303,20 @@ public class ItinerarioServiceTests
         return viaje;
     }
 
+    private static LugarCandidatoDto CrearLugarConCategoria(
+        string categoriaCodigo)
+        => new()
+        {
+            Id = Guid.NewGuid(),
+            Nombre = categoriaCodigo,
+            Barrio = BarrioCaba.Palermo,
+            Latitud = -34.58m,
+            Longitud = -58.42m,
+            NivelPrecio = NivelPresupuesto.SinRestricciones,
+            DuracionSugeridaMinutos = 60,
+            Categorias = new[] { categoriaCodigo }
+        };
+
     private static void AgregarCategoriasDia(
         Viaje viaje,
         short numeroDia,
@@ -324,6 +379,11 @@ public class ItinerarioServiceTests
         public List<BarrioCaba> BarriosSolicitados { get; } = new();
 
         public List<(BarrioCaba Barrio, IReadOnlyCollection<string> Categorias)> Solicitudes { get; } = new();
+
+        public void EstablecerLugares(
+            BarrioCaba barrio,
+            params LugarCandidatoDto[] lugares)
+            => _lugares[barrio] = lugares;
 
         public IReadOnlyCollection<LugarCandidatoDto> LugaresDe(BarrioCaba barrio)
         {
