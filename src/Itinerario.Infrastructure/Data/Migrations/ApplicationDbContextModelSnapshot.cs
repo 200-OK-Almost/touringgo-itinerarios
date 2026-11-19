@@ -37,6 +37,21 @@ namespace Itinerario.Infrastructure.Data.Migrations
                     b.ToTable("etiquetas_viaje", (string)null);
                 });
 
+            modelBuilder.Entity("Itinerario.Domain.Entities.EtiquetaViajeDia", b =>
+                {
+                    b.Property<Guid>("ViajeDiaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("viaje_dia_id");
+
+                    b.Property<string>("CategoriaCodigo")
+                        .HasColumnType("text")
+                        .HasColumnName("categoria_codigo");
+
+                    b.HasKey("ViajeDiaId", "CategoriaCodigo");
+
+                    b.ToTable("etiquetas_viaje_dia", (string)null);
+                });
+
             modelBuilder.Entity("Itinerario.Domain.Entities.Itinerario", b =>
                 {
                     b.Property<Guid>("Id")
@@ -392,6 +407,10 @@ namespace Itinerario.Infrastructure.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("tipo_punto_partida");
 
+                    b.Property<string>("TipoViaje")
+                        .HasColumnType("text")
+                        .HasColumnName("tipo_viaje");
+
                     b.Property<Guid>("ViajeId")
                         .HasColumnType("uuid")
                         .HasColumnName("viaje_id");
@@ -413,6 +432,17 @@ namespace Itinerario.Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Viaje");
+                });
+
+            modelBuilder.Entity("Itinerario.Domain.Entities.EtiquetaViajeDia", b =>
+                {
+                    b.HasOne("Itinerario.Domain.Entities.ViajeDia", "Dia")
+                        .WithMany("Etiquetas")
+                        .HasForeignKey("ViajeDiaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Dia");
                 });
 
             modelBuilder.Entity("Itinerario.Domain.Entities.Itinerario", b =>
@@ -486,6 +516,11 @@ namespace Itinerario.Infrastructure.Data.Migrations
                     b.Navigation("Miembros");
 
                     b.Navigation("ParametrosFamilia");
+                });
+
+            modelBuilder.Entity("Itinerario.Domain.Entities.ViajeDia", b =>
+                {
+                    b.Navigation("Etiquetas");
                 });
 #pragma warning restore 612, 618
         }

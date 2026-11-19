@@ -15,6 +15,8 @@ public class ViajeDia
     public string? DireccionPartida { get; set; }
     public decimal? LatitudPartida { get; set; }
     public decimal? LongitudPartida { get; set; }
+    public TipoViaje? TipoViaje { get; set; }
 
     public Viaje? Viaje { get; set; }
+    public ICollection<EtiquetaViajeDia> Etiquetas { get; set; } = new List<EtiquetaViajeDia>();
 }

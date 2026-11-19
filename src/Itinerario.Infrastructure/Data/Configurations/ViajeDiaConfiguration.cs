@@ -55,6 +55,10 @@ public class ViajeDiaConfiguration : IEntityTypeConfiguration<ViajeDia>
             .HasColumnName("longitud_partida")
             .HasPrecision(11, 8);
 
+        builder.Property(d => d.TipoViaje)
+            .HasColumnName("tipo_viaje")
+            .HasConversion<string>();
+
         builder.HasIndex(d => new { d.ViajeId, d.NumeroDia })
             .IsUnique();
 

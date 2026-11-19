@@ -16,6 +16,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<ParametrosFamilia> ParametrosFamilia => Set<ParametrosFamilia>();
     public DbSet<MiembroViaje> MiembrosViaje => Set<MiembroViaje>();
     public DbSet<EtiquetaViaje> EtiquetasViaje => Set<EtiquetaViaje>();
+    public DbSet<EtiquetaViajeDia> EtiquetasViajeDia => Set<EtiquetaViajeDia>();
     public DbSet<ItinerarioEntity> Itinerarios => Set<ItinerarioEntity>();
     public DbSet<ParadaItinerario> ParadasItinerario => Set<ParadaItinerario>();
     public DbSet<ViajeDia> ViajeDias => Set<ViajeDia>();
