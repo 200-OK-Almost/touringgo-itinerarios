@@ -56,9 +56,16 @@ public class ItinerarioGenerator : IItinerarioGenerator
                 break;
             }
 
-            var seleccion = latAnterior.HasValue && lonAnterior.HasValue
-                ? ElegirDelConjunto(disponibles, latAnterior.Value, lonAnterior.Value, limiteCuadras)
-                : ElegirSemilla(disponibles);
+            var compatibles = disponibles
+                .Where(lugar => ReglasTurno.EsCompatible(turnoAsignado, lugar))
+                .ToList();
+
+            var seleccion = ElegirParaTurno(
+                compatibles,
+                disponibles,
+                latAnterior,
+                lonAnterior,
+                limiteCuadras);
 
             if (seleccion is null)
             {
@@ -109,24 +116,64 @@ public class ItinerarioGenerator : IItinerarioGenerator
         return paradas;
     }
 
+    private Aproximacion? ElegirParaTurno(
+        IReadOnlyList<LugarCandidatoDto> compatibles,
+        IReadOnlyList<LugarCandidatoDto> disponibles,
+        double? latReferencia,
+        double? lonReferencia,
+        short limiteCuadras)
+    {
+        var seleccion = ElegirDe(compatibles, latReferencia, lonReferencia, limiteCuadras);
+
+        return seleccion ?? ElegirDe(disponibles, latReferencia, lonReferencia, limiteCuadras);
+    }
+
+    private Aproximacion? ElegirDe(
+        IReadOnlyList<LugarCandidatoDto> candidatos,
+        double? latReferencia,
+        double? lonReferencia,
+        short limiteCuadras)
+    {
+        if (candidatos.Count == 0)
+        {
+            return null;
+        }
+
+        if (!latReferencia.HasValue || !lonReferencia.HasValue)
+        {
+            return ElegirSemilla(candidatos);
+        }
+
+        return ElegirDelConjunto(
+            candidatos,
+            latReferencia.Value,
+            lonReferencia.Value,
+            limiteCuadras);
+    }
+
     private Aproximacion? ElegirDelConjunto(
         IEnumerable<LugarCandidatoDto> candidatos,
         double latReferencia,
         double lonReferencia,
         short limiteCuadras)
-        => candidatos
-            .Select(c =>
-            {
-                var metros = _geo.DistanciaMetros(latReferencia, lonReferencia, (double)c.Latitud, (double)c.Longitud);
-                return new Aproximacion(
-                    c,
-                    (int)Math.Round(metros),
-                    (short)_geo.Cuadras(metros),
-                    (short)_geo.MinutosAPie(metros));
-            })
+        => Proyectar(candidatos, latReferencia, lonReferencia)
             .Where(a => a.Cuadras <= limiteCuadras)
             .OrderBy(a => a.DistanciaMetros)
             .FirstOrDefault();
+
+    private IEnumerable<Aproximacion> Proyectar(
+        IEnumerable<LugarCandidatoDto> candidatos,
+        double latReferencia,
+        double lonReferencia)
+        => candidatos.Select(c =>
+        {
+            var metros = _geo.DistanciaMetros(latReferencia, lonReferencia, (double)c.Latitud, (double)c.Longitud);
+            return new Aproximacion(
+                c,
+                (int)Math.Round(metros),
+                (short)_geo.Cuadras(metros),
+                (short)_geo.MinutosAPie(metros));
+        });
 
     private static Aproximacion? ElegirSemilla(
         IReadOnlyList<LugarCandidatoDto> candidatos)
