@@ -72,11 +72,13 @@ public class ItinerarioService : IItinerarioService
 
             foreach (var dia in ObtenerDias(viaje))
             {
+                var categoriaCodigos = ObtenerCategoriasDia(viaje, dia);
                 var candidatos = await BuscarCandidatosAsync(
                     viaje,
                     perfil,
                     dia.Barrio,
                     dia.LugarPartidaId,
+                    categoriaCodigos,
                     cancellationToken);
 
                 foreach (var candidato in candidatos)
@@ -222,21 +224,31 @@ public class ItinerarioService : IItinerarioService
                 NombrePuntoPartida = viaje.NombrePuntoPartida,
                 DireccionPartida = viaje.DireccionPartida,
                 LatitudPartida = viaje.LatitudPartida,
-                LongitudPartida = viaje.LongitudPartida
+                LongitudPartida = viaje.LongitudPartida,
+                TipoViaje = viaje.TipoViaje
             })
             .ToList();
     }
+
+    private static IReadOnlyCollection<string> ObtenerCategoriasDia(Viaje viaje, ViajeDia dia)
+        => dia.Etiquetas.Count > 0
+            ? dia.Etiquetas.Select(e => e.CategoriaCodigo).ToList()
+            : viaje.Etiquetas.Select(e => e.CategoriaCodigo).ToList();
+
+    private static string ClaveCategorias(IReadOnlyCollection<string> categorias)
+        => string.Join("|", categorias.OrderBy(codigo => codigo));
 
     private async Task<List<LugarCandidatoDto>> BuscarCandidatosAsync(
         Viaje viaje,
         PerfilViajeroDto? perfil,
         BarrioCaba barrio,
         Guid? lugarPartidaId,
+        IReadOnlyCollection<string> categoriaCodigos,
         CancellationToken cancellationToken)
     {
         try
         {
-            var intencion = ConstruirIntencion(viaje, perfil, barrio);
+            var intencion = ConstruirIntencion(viaje, perfil, barrio, categoriaCodigos);
             var semanticos = await _lugaresClient.BuscarSemanticoAsync(intencion, 20, cancellationToken);
 
             var delBarrio = semanticos
@@ -253,7 +265,6 @@ public class ItinerarioService : IItinerarioService
             // degrada al filtro determinista por barrio y categorías
         }
 
-        var categoriaCodigos = viaje.Etiquetas.Select(e => e.CategoriaCodigo).ToList();
         var categoricos = await _lugaresClient.BuscarAsync(barrio, categoriaCodigos, cancellationToken);
         return categoricos
             .Where(l => l.Id != lugarPartidaId)
@@ -285,10 +296,11 @@ public class ItinerarioService : IItinerarioService
     private static string ConstruirIntencion(
         Viaje viaje,
         PerfilViajeroDto? perfil,
-        BarrioCaba barrio)
+        BarrioCaba barrio,
+        IReadOnlyCollection<string> categoriaCodigos)
     {
-        var categorias = viaje.Etiquetas
-            .Select(e => NombreCategoria(e.CategoriaCodigo))
+        var categorias = categoriaCodigos
+            .Select(NombreCategoria)
             .Where(n => n is not null)
             .Cast<string>()
             .ToList();
@@ -363,24 +375,28 @@ public class ItinerarioService : IItinerarioService
             viajeId, numeroDia, usuarioIdSolicitante, cancellationToken);
 
         var diasPorNumero = ObtenerDias(viaje).ToDictionary(d => d.NumeroDia);
-        var lugaresPorBarrio = new Dictionary<BarrioCaba, IReadOnlyCollection<LugarCandidatoDto>>();
+        var lugaresPorDia = new Dictionary<
+            (BarrioCaba Barrio, string Categorias),
+            IReadOnlyCollection<LugarCandidatoDto>>();
 
         foreach (var itinerario in itinerarios)
         {
             var dia = ObtenerDiaConfig(viaje, diasPorNumero, itinerario.NumeroDia);
+            var categorias = ObtenerCategoriasDia(viaje, dia);
+            var clave = (dia.Barrio, ClaveCategorias(categorias));
 
-            if (!lugaresPorBarrio.ContainsKey(dia.Barrio))
+            if (!lugaresPorDia.ContainsKey(clave))
             {
-                lugaresPorBarrio[dia.Barrio] = await BuscarLugaresAsync(
-                    viaje,
+                lugaresPorDia[clave] = await BuscarLugaresAsync(
                     dia.Barrio,
+                    categorias,
                     cancellationToken);
             }
         }
 
         var lugaresActuales = ConstruirLugaresActuales(
             itinerarios,
-            lugaresPorBarrio.Values.SelectMany(lugares => lugares).ToList());
+            lugaresPorDia.Values.SelectMany(lugares => lugares).ToList());
 
         var puntosPartida = diasPorNumero.Values
             .Where(dia => dia.LugarPartidaId.HasValue)
@@ -390,7 +406,8 @@ public class ItinerarioService : IItinerarioService
         foreach (var itinerario in itinerarios)
         {
             var dia = ObtenerDiaConfig(viaje, diasPorNumero, itinerario.NumeroDia);
-            var lugaresDia = lugaresPorBarrio[dia.Barrio];
+            var categorias = ObtenerCategoriasDia(viaje, dia);
+            var lugaresDia = lugaresPorDia[(dia.Barrio, ClaveCategorias(categorias))];
             var disponibles = ConstruirDisponibles(itinerarios, lugaresDia, viaje)
                 .Where(lugar => !puntosPartida.Contains(lugar.Id))
                 .ToList();
@@ -426,12 +443,15 @@ public class ItinerarioService : IItinerarioService
 
         var perfil = await ObtenerPerfilSeguroAsync(cancellationToken);
         var diasPorNumero = ObtenerDias(viaje).ToDictionary(d => d.NumeroDia);
-        var candidatosPorDia = new Dictionary<(BarrioCaba Barrio, Guid? LugarPartidaId), List<LugarCandidatoDto>>();
+        var candidatosPorDia = new Dictionary<
+            (BarrioCaba Barrio, Guid? LugarPartidaId, string Categorias),
+            List<LugarCandidatoDto>>();
 
         foreach (var itinerario in itinerarios)
         {
             var dia = ObtenerDiaConfig(viaje, diasPorNumero, itinerario.NumeroDia);
-            var clave = (dia.Barrio, dia.LugarPartidaId);
+            var categorias = ObtenerCategoriasDia(viaje, dia);
+            var clave = (dia.Barrio, dia.LugarPartidaId, ClaveCategorias(categorias));
 
             if (!candidatosPorDia.TryGetValue(clave, out var lugares))
             {
@@ -440,6 +460,7 @@ public class ItinerarioService : IItinerarioService
                     perfil,
                     dia.Barrio,
                     dia.LugarPartidaId,
+                    categorias,
                     cancellationToken);
                 candidatosPorDia[clave] = lugares;
             }
@@ -492,13 +513,10 @@ public class ItinerarioService : IItinerarioService
     }
 
     private Task<IReadOnlyCollection<LugarCandidatoDto>> BuscarLugaresAsync(
-        Viaje viaje,
         BarrioCaba barrio,
+        IReadOnlyCollection<string> categoriaCodigos,
         CancellationToken cancellationToken)
-    {
-        var categoriaCodigos = viaje.Etiquetas.Select(e => e.CategoriaCodigo).ToList();
-        return _lugaresClient.BuscarAsync(barrio, categoriaCodigos, cancellationToken);
-    }
+        => _lugaresClient.BuscarAsync(barrio, categoriaCodigos, cancellationToken);
 
     private static ViajeDia ObtenerDiaConfig(
         Viaje viaje,
@@ -520,7 +538,8 @@ public class ItinerarioService : IItinerarioService
             NombrePuntoPartida = viaje.NombrePuntoPartida,
             DireccionPartida = viaje.DireccionPartida,
             LatitudPartida = viaje.LatitudPartida,
-            LongitudPartida = viaje.LongitudPartida
+            LongitudPartida = viaje.LongitudPartida,
+            TipoViaje = viaje.TipoViaje
         };
     }
 

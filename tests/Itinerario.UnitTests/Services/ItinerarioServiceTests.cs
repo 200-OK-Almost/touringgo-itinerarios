@@ -40,6 +40,32 @@ public class ItinerarioServiceTests
     }
 
     [Fact]
+    public async Task GenerarAsync_UsaLasCategoriasDeCadaDia()
+    {
+        var viaje = CrearViajeConDias(
+            (BarrioCaba.Palermo, Inicio),
+            (BarrioCaba.Recoleta, Inicio.AddDays(1)));
+        AgregarCategoriasDia(viaje, 1, "cafe_especialidad", "museos_galerias");
+        AgregarCategoriasDia(viaje, 2, "parques_aire_libre", "gastronomia_clasica");
+
+        var lugares = new LugaresClientFalso();
+        var service = CrearService(viaje, lugares, new ItinerarioRepositoryFalso());
+
+        await service.GenerarAsync(viaje.Id, viaje.CreadoPorUsuarioId);
+
+        Assert.Contains(
+            lugares.Solicitudes,
+            solicitud => solicitud.Barrio == BarrioCaba.Palermo
+                && solicitud.Categorias.Contains("cafe_especialidad")
+                && solicitud.Categorias.Contains("museos_galerias"));
+        Assert.Contains(
+            lugares.Solicitudes,
+            solicitud => solicitud.Barrio == BarrioCaba.Recoleta
+                && solicitud.Categorias.Contains("parques_aire_libre")
+                && solicitud.Categorias.Contains("gastronomia_clasica"));
+    }
+
+    [Fact]
     public async Task GenerarAsync_SinDias_UsaElBarrioDelViaje()
     {
         var viaje = CrearViajeConDias(
@@ -88,11 +114,47 @@ public class ItinerarioServiceTests
     }
 
     [Fact]
+    public async Task RefinarAsync_ConsultaCategoriasDeCadaDia()
+    {
+        var viaje = CrearViajeConDias(
+            (BarrioCaba.Palermo, Inicio),
+            (BarrioCaba.Recoleta, Inicio.AddDays(1)));
+        AgregarCategoriasDia(viaje, 1, "cafe_especialidad", "museos_galerias");
+        AgregarCategoriasDia(viaje, 2, "parques_aire_libre", "gastronomia_clasica");
+
+        var lugares = new LugaresClientFalso();
+        var itinerarios = new[]
+        {
+            CrearItinerario(viaje, 1, lugares.LugaresDe(BarrioCaba.Palermo).First().Id),
+            CrearItinerario(viaje, 2, lugares.LugaresDe(BarrioCaba.Recoleta).First().Id)
+        };
+        var repo = new ItinerarioRepositoryFalso { Itinerarios = itinerarios };
+        var service = CrearService(viaje, lugares, repo);
+
+        await service.RefinarAsync(
+            viaje.Id,
+            TipoRefinamiento.MasEconomico,
+            null,
+            viaje.CreadoPorUsuarioId);
+
+        Assert.Contains(
+            lugares.Solicitudes,
+            solicitud => solicitud.Barrio == BarrioCaba.Palermo
+                && solicitud.Categorias.Contains("cafe_especialidad"));
+        Assert.Contains(
+            lugares.Solicitudes,
+            solicitud => solicitud.Barrio == BarrioCaba.Recoleta
+                && solicitud.Categorias.Contains("parques_aire_libre"));
+    }
+
+    [Fact]
     public async Task SugerirTurnosLibresAsync_UsaElBarrioDeCadaDia()
     {
         var viaje = CrearViajeConDias(
             (BarrioCaba.Palermo, Inicio),
             (BarrioCaba.Recoleta, Inicio.AddDays(1)));
+        AgregarCategoriasDia(viaje, 1, "cafe_especialidad", "museos_galerias");
+        AgregarCategoriasDia(viaje, 2, "parques_aire_libre", "gastronomia_clasica");
 
         var lugares = new LugaresClientFalso();
         var itinerario1 = CrearItinerario(viaje, 1);
@@ -119,6 +181,14 @@ public class ItinerarioServiceTests
         Assert.All(
             repo.ParadasAgregadas.Where(p => p.ItinerarioId == itinerario2.Id),
             parada => Assert.Contains(parada.LugarId, idsRecoleta));
+        Assert.Contains(
+            lugares.Solicitudes,
+            solicitud => solicitud.Barrio == BarrioCaba.Palermo
+                && solicitud.Categorias.Contains("cafe_especialidad"));
+        Assert.Contains(
+            lugares.Solicitudes,
+            solicitud => solicitud.Barrio == BarrioCaba.Recoleta
+                && solicitud.Categorias.Contains("parques_aire_libre"));
     }
 
     private static ItinerarioService CrearService(
@@ -183,6 +253,23 @@ public class ItinerarioServiceTests
         return viaje;
     }
 
+    private static void AgregarCategoriasDia(
+        Viaje viaje,
+        short numeroDia,
+        params string[] categoriaCodigos)
+    {
+        var dia = viaje.Dias.Single(d => d.NumeroDia == numeroDia);
+
+        foreach (var categoriaCodigo in categoriaCodigos)
+        {
+            dia.Etiquetas.Add(new EtiquetaViajeDia
+            {
+                ViajeDiaId = dia.Id,
+                CategoriaCodigo = categoriaCodigo
+            });
+        }
+    }
+
     private static ItinerarioEntity CrearItinerario(
         Viaje viaje,
         short numeroDia,
@@ -227,6 +314,8 @@ public class ItinerarioServiceTests
 
         public List<BarrioCaba> BarriosSolicitados { get; } = new();
 
+        public List<(BarrioCaba Barrio, IReadOnlyCollection<string> Categorias)> Solicitudes { get; } = new();
+
         public IReadOnlyCollection<LugarCandidatoDto> LugaresDe(BarrioCaba barrio)
         {
             if (!_lugares.TryGetValue(barrio, out var lugares))
@@ -246,6 +335,7 @@ public class ItinerarioServiceTests
             CancellationToken cancellationToken = default)
         {
             BarriosSolicitados.Add(barrio);
+            Solicitudes.Add((barrio, categoriaCodigos.ToList()));
             return Task.FromResult(LugaresDe(barrio));
         }
 
