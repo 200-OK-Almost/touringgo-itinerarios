@@ -22,6 +22,21 @@ public class ViajeDiaCreateDtoValidator : AbstractValidator<ViajeDiaCreateDto>
         RuleFor(d => d.TipoPuntoPartida)
             .IsInEnum();
 
+        RuleFor(d => d.TipoViaje)
+            .Must(tipo => !tipo.HasValue || Enum.IsDefined(tipo.Value))
+            .WithMessage("La modalidad de viaje del día no es válida.");
+
+        RuleFor(d => d.CategoriaCodigos)
+            .Must(categorias => categorias is null
+                || categorias.Count == 0
+                || categorias.Count is >= 2 and <= 4)
+            .WithMessage("Debe elegir entre 2 y 4 categorías por día.");
+
+        RuleFor(d => d.CategoriaCodigos)
+            .Must(categorias => categorias is null
+                || categorias.All(codigo => !string.IsNullOrWhiteSpace(codigo)))
+            .WithMessage("Los códigos de categoría del día no pueden estar vacíos.");
+
         RuleFor(d => d.NombrePuntoPartida)
             .MaximumLength(150);
 

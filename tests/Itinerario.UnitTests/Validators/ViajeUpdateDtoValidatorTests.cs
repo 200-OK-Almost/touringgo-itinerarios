@@ -98,6 +98,21 @@ public class ViajeUpdateDtoValidatorTests
     }
 
     [Fact]
+    public void DiaConUnaSolaCategoria_EsInvalido()
+    {
+        var dto = CrearDto(Inicio, Inicio);
+        dto.Dias = CrearDias(Inicio, 1);
+        dto.Dias.First().CategoriaCodigos = new[] { "cafe_especialidad" };
+
+        var resultado = _validator.Validate(dto);
+
+        Assert.False(resultado.IsValid);
+        Assert.Contains(
+            resultado.Errors,
+            error => error.ErrorMessage.Contains("2 y 4"));
+    }
+
+    [Fact]
     public void DiasQueNoCoincidenConElRango_EsInvalido()
     {
         var dto = CrearDto(Inicio, Inicio.AddDays(2));

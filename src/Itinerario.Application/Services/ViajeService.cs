@@ -250,7 +250,7 @@ public class ViajeService : IViajeService
     private static void AgregarDias(Viaje viaje, ViajeCreateDto dto)
     {
         var dias = dto.Dias is { Count: > 0 }
-            ? MapearDias(viaje.Id, dto.Dias)
+            ? MapearDias(viaje, dto.Dias)
             : ConstruirDiasPorDefecto(
                 viaje.Id,
                 dto.FechaInicio,
@@ -261,7 +261,9 @@ public class ViajeService : IViajeService
                 dto.NombrePuntoPartida,
                 dto.DireccionPartida,
                 dto.LatitudPartida,
-                dto.LongitudPartida);
+                dto.LongitudPartida,
+                dto.TipoViaje,
+                dto.CategoriaCodigos);
 
         foreach (var dia in dias)
         {
@@ -273,7 +275,7 @@ public class ViajeService : IViajeService
     {
         if (dto.Dias is not null)
         {
-            _repository.SincronizarDias(viaje, MapearDias(viaje.Id, dto.Dias));
+            _repository.SincronizarDias(viaje, MapearDias(viaje, dto.Dias));
             return;
         }
 
@@ -291,32 +293,50 @@ public class ViajeService : IViajeService
                     viaje.NombrePuntoPartida,
                     viaje.DireccionPartida,
                     viaje.LatitudPartida,
-                    viaje.LongitudPartida));
+                    viaje.LongitudPartida,
+                    viaje.TipoViaje,
+                    viaje.Etiquetas.Select(e => e.CategoriaCodigo).ToList()));
         }
     }
 
     private static IReadOnlyCollection<ViajeDia> MapearDias(
-        Guid viajeId,
+        Viaje viaje,
         IReadOnlyCollection<ViajeDiaCreateDto> dias)
         => dias
             .OrderBy(d => d.NumeroDia)
-            .Select(d => MapearDia(viajeId, d))
+            .Select(d => MapearDia(viaje, d))
             .ToList();
 
-    private static ViajeDia MapearDia(Guid viajeId, ViajeDiaCreateDto dto) => new()
+    private static ViajeDia MapearDia(Viaje viaje, ViajeDiaCreateDto dto)
     {
-        Id = Guid.NewGuid(),
-        ViajeId = viajeId,
-        NumeroDia = dto.NumeroDia,
-        Fecha = dto.Fecha,
-        Barrio = dto.Barrio,
-        TipoPuntoPartida = dto.TipoPuntoPartida,
-        LugarPartidaId = dto.LugarPartidaId,
-        NombrePuntoPartida = dto.NombrePuntoPartida,
-        DireccionPartida = dto.DireccionPartida,
-        LatitudPartida = dto.LatitudPartida,
-        LongitudPartida = dto.LongitudPartida
-    };
+        var id = Guid.NewGuid();
+        var categorias = dto.CategoriaCodigos is { Count: > 0 }
+            ? dto.CategoriaCodigos
+            : viaje.Etiquetas.Select(e => e.CategoriaCodigo).ToList();
+
+        return new ViajeDia
+        {
+            Id = id,
+            ViajeId = viaje.Id,
+            NumeroDia = dto.NumeroDia,
+            Fecha = dto.Fecha,
+            Barrio = dto.Barrio,
+            TipoPuntoPartida = dto.TipoPuntoPartida,
+            LugarPartidaId = dto.LugarPartidaId,
+            NombrePuntoPartida = dto.NombrePuntoPartida,
+            DireccionPartida = dto.DireccionPartida,
+            LatitudPartida = dto.LatitudPartida,
+            LongitudPartida = dto.LongitudPartida,
+            TipoViaje = dto.TipoViaje ?? viaje.TipoViaje,
+            Etiquetas = categorias
+                .Select(codigo => new EtiquetaViajeDia
+                {
+                    ViajeDiaId = id,
+                    CategoriaCodigo = codigo
+                })
+                .ToList()
+        };
+    }
 
     private static IReadOnlyCollection<ViajeDia> ConstruirDiasPorDefecto(
         Guid viajeId,
@@ -328,21 +348,36 @@ public class ViajeService : IViajeService
         string? nombrePuntoPartida,
         string? direccionPartida,
         decimal? latitudPartida,
-        decimal? longitudPartida)
+        decimal? longitudPartida,
+        TipoViaje tipoViaje,
+        IReadOnlyCollection<string> categoriaCodigos)
         => PlanificadorDias.Calcular(fechaInicio, fechaFin)
-            .Select(dia => new ViajeDia
+            .Select(dia =>
             {
-                Id = Guid.NewGuid(),
-                ViajeId = viajeId,
-                NumeroDia = dia.NumeroDia,
-                Fecha = dia.Fecha,
-                Barrio = barrio,
-                TipoPuntoPartida = tipoPuntoPartida,
-                LugarPartidaId = lugarPartidaId,
-                NombrePuntoPartida = nombrePuntoPartida,
-                DireccionPartida = direccionPartida,
-                LatitudPartida = latitudPartida,
-                LongitudPartida = longitudPartida
+                var id = Guid.NewGuid();
+
+                return new ViajeDia
+                {
+                    Id = id,
+                    ViajeId = viajeId,
+                    NumeroDia = dia.NumeroDia,
+                    Fecha = dia.Fecha,
+                    Barrio = barrio,
+                    TipoPuntoPartida = tipoPuntoPartida,
+                    LugarPartidaId = lugarPartidaId,
+                    NombrePuntoPartida = nombrePuntoPartida,
+                    DireccionPartida = direccionPartida,
+                    LatitudPartida = latitudPartida,
+                    LongitudPartida = longitudPartida,
+                    TipoViaje = tipoViaje,
+                    Etiquetas = categoriaCodigos
+                        .Select(codigo => new EtiquetaViajeDia
+                        {
+                            ViajeDiaId = id,
+                            CategoriaCodigo = codigo
+                        })
+                        .ToList()
+                };
             })
             .ToList();
 
@@ -420,7 +455,7 @@ public class ViajeService : IViajeService
         Dias = viaje.Dias.Count > 0
             ? viaje.Dias
                 .OrderBy(d => d.NumeroDia)
-                .Select(MapearDiaRespuesta)
+                .Select(dia => MapearDiaRespuesta(dia, viaje))
                 .ToList()
             : null,
         ParametrosFamilia = viaje.ParametrosFamilia is null
@@ -442,7 +477,7 @@ public class ViajeService : IViajeService
             : null
     };
 
-    private static ViajeDiaResponseDto MapearDiaRespuesta(ViajeDia dia) => new()
+    private static ViajeDiaResponseDto MapearDiaRespuesta(ViajeDia dia, Viaje viaje) => new()
     {
         Id = dia.Id,
         ViajeId = dia.ViajeId,
@@ -454,7 +489,11 @@ public class ViajeService : IViajeService
         NombrePuntoPartida = dia.NombrePuntoPartida,
         DireccionPartida = dia.DireccionPartida,
         LatitudPartida = dia.LatitudPartida,
-        LongitudPartida = dia.LongitudPartida
+        LongitudPartida = dia.LongitudPartida,
+        TipoViaje = dia.TipoViaje ?? viaje.TipoViaje,
+        CategoriaCodigos = dia.Etiquetas.Count > 0
+            ? dia.Etiquetas.Select(e => e.CategoriaCodigo).ToList()
+            : viaje.Etiquetas.Select(e => e.CategoriaCodigo).ToList()
     };
 
     private static ItinerarioResponseDto MapearItinerario(Domain.Entities.Itinerario itinerario) => new()

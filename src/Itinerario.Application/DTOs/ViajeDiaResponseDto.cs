@@ -15,4 +15,6 @@ public class ViajeDiaResponseDto
     public string? DireccionPartida { get; set; }
     public decimal? LatitudPartida { get; set; }
     public decimal? LongitudPartida { get; set; }
+    public TipoViaje? TipoViaje { get; set; }
+    public IReadOnlyCollection<string> CategoriaCodigos { get; set; } = new List<string>();
 }

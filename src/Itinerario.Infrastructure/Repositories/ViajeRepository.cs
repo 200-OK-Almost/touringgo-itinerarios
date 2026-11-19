@@ -23,6 +23,7 @@ public class ViajeRepository : IViajeRepository
             .Include(v => v.Etiquetas)
             .Include(v => v.ParametrosFamilia)
             .Include(v => v.Dias)
+                .ThenInclude(d => d.Etiquetas)
             .Include(v => v.Itinerarios)
                 .ThenInclude(i => i.Paradas)
             .FirstOrDefaultAsync(v => v.Id == id, cancellationToken);
@@ -39,6 +40,7 @@ public class ViajeRepository : IViajeRepository
             .Include(v => v.Etiquetas)
             .Include(v => v.ParametrosFamilia)
             .Include(v => v.Dias)
+                .ThenInclude(d => d.Etiquetas)
             .Include(v => v.Itinerarios)
                 .ThenInclude(i => i.Paradas)
             .AsNoTracking();
@@ -60,6 +62,7 @@ public class ViajeRepository : IViajeRepository
         => _context.Viajes
             .Include(v => v.Miembros)
             .Include(v => v.Dias)
+                .ThenInclude(d => d.Etiquetas)
             .FirstOrDefaultAsync(v => v.CodigoInvitacion == codigoInvitacion, cancellationToken);
 
     public Task<bool> ExisteCodigoInvitacionAsync(
@@ -123,6 +126,8 @@ public class ViajeRepository : IViajeRepository
             actual.DireccionPartida = deseado.DireccionPartida;
             actual.LatitudPartida = deseado.LatitudPartida;
             actual.LongitudPartida = deseado.LongitudPartida;
+            actual.TipoViaje = deseado.TipoViaje;
+            SincronizarEtiquetasDia(actual, deseado.Etiquetas);
         }
 
         foreach (var nuevo in deseadosPorNumero.Values)
@@ -130,6 +135,37 @@ public class ViajeRepository : IViajeRepository
             nuevo.ViajeId = viaje.Id;
             viaje.Dias.Add(nuevo);
             _context.ViajeDias.Add(nuevo);
+        }
+    }
+
+    private void SincronizarEtiquetasDia(
+        ViajeDia dia,
+        IEnumerable<EtiquetaViajeDia> deseadas)
+    {
+        var codigosDeseados = deseadas
+            .Select(e => e.CategoriaCodigo)
+            .ToHashSet();
+        var actuales = dia.Etiquetas.ToList();
+
+        foreach (var etiqueta in actuales.Where(e => !codigosDeseados.Contains(e.CategoriaCodigo)))
+        {
+            dia.Etiquetas.Remove(etiqueta);
+            _context.EtiquetasViajeDia.Remove(etiqueta);
+        }
+
+        var existentes = actuales
+            .Select(e => e.CategoriaCodigo)
+            .ToHashSet();
+
+        foreach (var codigo in codigosDeseados.Where(c => !existentes.Contains(c)))
+        {
+            var nueva = new EtiquetaViajeDia
+            {
+                ViajeDiaId = dia.Id,
+                CategoriaCodigo = codigo
+            };
+            dia.Etiquetas.Add(nueva);
+            _context.EtiquetasViajeDia.Add(nueva);
         }
     }
 
