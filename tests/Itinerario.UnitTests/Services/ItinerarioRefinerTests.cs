@@ -181,6 +181,131 @@ public class ItinerarioRefinerTests
     }
 
     [Fact]
+    public void Refinar_MasEconomico_RespetaLaCategoriaDelTurno()
+    {
+        var refiner = CrearRefiner();
+        var viaje = CrearViaje(presupuesto: NivelPresupuesto.SinRestricciones);
+        var itinerario = CrearItinerario(viaje);
+        var actualId = Guid.NewGuid();
+        var barId = Guid.NewGuid();
+        var cafeId = Guid.NewGuid();
+        itinerario.Paradas.Add(CrearParada(actualId, Turno.Manana));
+
+        var lugaresActuales = LugaresPorId(
+            CrearLugar(
+                id: actualId,
+                precio: NivelPresupuesto.SinRestricciones,
+                categorias: new[] { "cafe_especialidad" }));
+
+        var disponibles = new List<LugarCandidatoDto>
+        {
+            CrearLugar(
+                id: barId,
+                precio: NivelPresupuesto.Economico,
+                categorias: new[] { "bares_vermu" }),
+            CrearLugar(
+                id: cafeId,
+                precio: NivelPresupuesto.Economico,
+                categorias: new[] { "cafe_especialidad" })
+        };
+
+        refiner.Refinar(
+            TipoRefinamiento.MasEconomico,
+            itinerario,
+            lugaresActuales,
+            disponibles,
+            viaje);
+
+        Assert.Equal(cafeId, itinerario.Paradas.Single().LugarId);
+        Assert.Contains(disponibles, lugar => lugar.Id == barId);
+    }
+
+    [Fact]
+    public void Refinar_SinCategoriaCompatible_UsaCualquierCandidato()
+    {
+        var refiner = CrearRefiner();
+        var viaje = CrearViaje(presupuesto: NivelPresupuesto.SinRestricciones);
+        var itinerario = CrearItinerario(viaje);
+        var actualId = Guid.NewGuid();
+        var barId = Guid.NewGuid();
+        itinerario.Paradas.Add(CrearParada(actualId, Turno.Mediodia));
+
+        var lugaresActuales = LugaresPorId(
+            CrearLugar(
+                id: actualId,
+                precio: NivelPresupuesto.SinRestricciones,
+                categorias: new[] { "gastronomia_clasica" }));
+
+        var disponibles = new List<LugarCandidatoDto>
+        {
+            CrearLugar(
+                id: barId,
+                precio: NivelPresupuesto.Economico,
+                categorias: new[] { "bares_vermu" })
+        };
+
+        refiner.Refinar(
+            TipoRefinamiento.MasEconomico,
+            itinerario,
+            lugaresActuales,
+            disponibles,
+            viaje);
+
+        Assert.Equal(barId, itinerario.Paradas.Single().LugarId);
+    }
+
+    [Fact]
+    public void SugerirTurnosLibres_RespetaLaCategoriaDelTurno()
+    {
+        var refiner = CrearRefiner();
+        var viaje = CrearViaje(alcance: AlcanceTemporal.DiaCompleto);
+        var itinerario = CrearItinerario(viaje);
+        var cafeId = Guid.NewGuid();
+        var restauranteId = Guid.NewGuid();
+        var barId = Guid.NewGuid();
+        var cocteleriaId = Guid.NewGuid();
+
+        var disponibles = new List<LugarCandidatoDto>
+        {
+            CrearLugar(
+                id: cafeId,
+                precio: NivelPresupuesto.Equilibrado,
+                categorias: new[] { "cafe_especialidad" }),
+            CrearLugar(
+                id: restauranteId,
+                precio: NivelPresupuesto.Equilibrado,
+                categorias: new[] { "gastronomia_clasica" }),
+            CrearLugar(
+                id: barId,
+                precio: NivelPresupuesto.Equilibrado,
+                categorias: new[] { "bares_vermu" }),
+            CrearLugar(
+                id: cocteleriaId,
+                precio: NivelPresupuesto.Equilibrado,
+                categorias: new[] { "cocteleria_autor" })
+        };
+
+        var sugerencias = refiner.SugerirTurnosLibres(
+            itinerario,
+            disponibles,
+            viaje);
+
+        Assert.Equal(4, sugerencias.Count);
+        Assert.Equal(
+            cafeId,
+            sugerencias.Single(s => s.Turno == Turno.Manana).LugarId);
+        Assert.Equal(
+            restauranteId,
+            sugerencias.Single(s => s.Turno == Turno.Mediodia).LugarId);
+        Assert.Equal(
+            barId,
+            sugerencias.Single(s => s.Turno == Turno.Tarde).LugarId);
+        Assert.Equal(
+            cocteleriaId,
+            sugerencias.Single(s => s.Turno == Turno.Noche).LugarId);
+    }
+
+    [Fact]
     public void SugerirTurnosLibres_CreaSugerenciaParaCadaTurnoVacio()
     {
         var refiner = CrearRefiner();
@@ -318,7 +443,8 @@ public class ItinerarioRefinerTests
         bool aireLibre = false,
         decimal latitud = -34.58m,
         decimal longitud = -58.42m,
-        short duracionMinutos = 60)
+        short duracionMinutos = 60,
+        params string[] categorias)
         => new()
         {
             Id = id ?? Guid.NewGuid(),
@@ -327,7 +453,8 @@ public class ItinerarioRefinerTests
             Longitud = longitud,
             NivelPrecio = precio,
             EsAireLibre = aireLibre,
-            DuracionSugeridaMinutos = duracionMinutos
+            DuracionSugeridaMinutos = duracionMinutos,
+            Categorias = categorias
         };
 
     private static IReadOnlyDictionary<Guid, LugarCandidatoDto> LugaresPorId(params LugarCandidatoDto[] lugares)
