@@ -19,7 +19,7 @@ public class LugaresClientTests
             const string json = """
             {
               "items": [
-                { "id": "11111111-1111-1111-1111-111111111101", "nombre": "Plaza Serrano", "latitud": -34.5883, "longitud": -58.4306, "duracionEstimadaMinutos": 45, "nivelPrecio": 1, "esAlAireLibre": true }
+                { "id": "11111111-1111-1111-1111-111111111101", "nombre": "Plaza Serrano", "latitud": -34.5883, "longitud": -58.4306, "duracionEstimadaMinutos": 45, "nivelPrecio": 1, "esAlAireLibre": true, "categorias": ["parques_aire_libre", "cafe_especialidad"] }
               ],
               "total": 1,
               "pagina": 1,
@@ -40,6 +40,9 @@ public class LugaresClientTests
         Assert.Equal(NivelPresupuesto.Economico, unico.NivelPrecio);
         Assert.True(unico.EsAireLibre);
         Assert.Equal(45, unico.DuracionSugeridaMinutos);
+        Assert.Equal(
+            new[] { "parques_aire_libre", "cafe_especialidad" },
+            unico.Categorias);
 
         Assert.Contains("barrio=Palermo", query);
         Assert.Contains("categoriaCodigo=cafe_especialidad", query);
@@ -112,7 +115,7 @@ public class LugaresClientTests
         var handler = new FakeHandler(_ => JsonResponse(
             """
             [
-              { "id": "11111111-1111-1111-1111-111111111101", "nombre": "Plaza Serrano", "barrio": "Palermo", "latitud": -34.5883, "longitud": -58.4306, "duracionEstimadaMinutos": 45, "nivelPrecio": 2, "esAlAireLibre": true }
+              { "id": "11111111-1111-1111-1111-111111111101", "nombre": "Plaza Serrano", "barrio": "Palermo", "latitud": -34.5883, "longitud": -58.4306, "duracionEstimadaMinutos": 45, "nivelPrecio": 2, "esAlAireLibre": true, "categorias": [{ "id": 3, "codigo": "parques_aire_libre", "nombre": "Parques y aire libre" }] }
             ]
             """));
 
@@ -125,6 +128,7 @@ public class LugaresClientTests
         Assert.Equal(BarrioCaba.Palermo, unico.Barrio);
         Assert.Equal(NivelPresupuesto.Equilibrado, unico.NivelPrecio);
         Assert.True(unico.EsAireLibre);
+        Assert.Equal(new[] { "parques_aire_libre" }, unico.Categorias);
     }
 
     private static HttpResponseMessage JsonResponse(string json)

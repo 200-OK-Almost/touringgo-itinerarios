@@ -23,7 +23,7 @@ public class LugaresClient : ILugaresClient
     {
         try
         {
-            var lugar = await _httpClient.GetFromJsonAsync<LugarItemDto>(
+            var lugar = await _httpClient.GetFromJsonAsync<LugarSemanticoItemDto>(
                 $"/api/lugares/{lugarId}", cancellationToken);
 
             return lugar is null ? null : Mapear(lugar);
@@ -115,8 +115,8 @@ public class LugaresClient : ILugaresClient
             using var response = await _httpClient.PostAsJsonAsync("/api/lugares", request, cancellationToken);
             response.EnsureSuccessStatusCode();
 
-            var items = await response.Content.ReadFromJsonAsync<List<LugarItemDto>>(cancellationToken: cancellationToken);
-            return (items ?? new List<LugarItemDto>()).Select(Mapear).ToList();
+            var items = await response.Content.ReadFromJsonAsync<List<LugarSemanticoItemDto>>(cancellationToken: cancellationToken);
+            return (items ?? new List<LugarSemanticoItemDto>()).Select(Mapear).ToList();
         }
         catch (HttpRequestException ex)
         {
@@ -134,7 +134,7 @@ public class LugaresClient : ILugaresClient
         public int Cantidad { get; set; }
     }
 
-    private static LugarCandidatoDto Mapear(LugarItemDto lugar) => new()
+    private static LugarCandidatoDto Mapear(LugarListadoItemDto lugar) => new()
     {
         Id = lugar.Id,
         Nombre = lugar.Nombre,
@@ -143,7 +143,23 @@ public class LugaresClient : ILugaresClient
         Longitud = lugar.Longitud,
         NivelPrecio = MapearNivelPrecio(lugar.NivelPrecio),
         EsAireLibre = lugar.EsAlAireLibre,
-        DuracionSugeridaMinutos = lugar.DuracionEstimadaMinutos
+        DuracionSugeridaMinutos = lugar.DuracionEstimadaMinutos,
+        Categorias = lugar.Categorias
+    };
+
+    private static LugarCandidatoDto Mapear(LugarSemanticoItemDto lugar) => new()
+    {
+        Id = lugar.Id,
+        Nombre = lugar.Nombre,
+        Barrio = ParseBarrio(lugar.Barrio),
+        Latitud = lugar.Latitud,
+        Longitud = lugar.Longitud,
+        NivelPrecio = MapearNivelPrecio(lugar.NivelPrecio),
+        EsAireLibre = lugar.EsAlAireLibre,
+        DuracionSugeridaMinutos = lugar.DuracionEstimadaMinutos,
+        Categorias = lugar.Categorias
+            .Select(categoria => categoria.Codigo)
+            .ToList()
     };
 
     private static BarrioCaba ParseBarrio(string? barrio)
