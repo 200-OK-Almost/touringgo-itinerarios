@@ -191,12 +191,14 @@ public class ItinerarioRefinerTests
         var disponibles = new List<LugarCandidatoDto>
         {
             CrearLugar(precio: NivelPresupuesto.Economico),
+            CrearLugar(precio: NivelPresupuesto.Economico),
             CrearLugar(precio: NivelPresupuesto.Economico)
         };
 
         var sugerencias = refiner.SugerirTurnosLibres(itinerario, disponibles, viaje);
 
-        Assert.Equal(2, sugerencias.Count);
+        Assert.Equal(3, sugerencias.Count);
+        Assert.Contains(sugerencias, s => s.Turno == Turno.Mediodia);
         Assert.Contains(sugerencias, s => s.Turno == Turno.Tarde);
         Assert.Contains(sugerencias, s => s.Turno == Turno.Noche);
         Assert.All(sugerencias, s => Assert.Equal(OrigenParada.SugerenciaHueco, s.OrigenParada));
@@ -230,7 +232,7 @@ public class ItinerarioRefinerTests
         var viaje = CrearViaje(alcance: AlcanceTemporal.MananaAlmuerzo);
         var itinerario = CrearItinerario(viaje);
         itinerario.Paradas.Add(CrearParada(Guid.NewGuid(), Turno.Manana));
-        itinerario.Paradas.Add(CrearParada(Guid.NewGuid(), Turno.Tarde));
+        itinerario.Paradas.Add(CrearParada(Guid.NewGuid(), Turno.Mediodia));
 
         var disponibles = new List<LugarCandidatoDto>
         {

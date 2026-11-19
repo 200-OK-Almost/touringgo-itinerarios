@@ -227,9 +227,15 @@ public class ItinerarioRefiner : IItinerarioRefiner
 
     private static IReadOnlyList<Turno> TurnosSegunAlcance(AlcanceTemporal alcance) => alcance switch
     {
-        AlcanceTemporal.DiaCompleto => new[] { Turno.Manana, Turno.Tarde, Turno.Noche },
+        AlcanceTemporal.DiaCompleto => new[]
+        {
+            Turno.Manana,
+            Turno.Mediodia,
+            Turno.Tarde,
+            Turno.Noche
+        },
         AlcanceTemporal.TardeNoche => new[] { Turno.Tarde, Turno.Noche },
-        AlcanceTemporal.MananaAlmuerzo => new[] { Turno.Manana, Turno.Tarde },
+        AlcanceTemporal.MananaAlmuerzo => new[] { Turno.Manana, Turno.Mediodia },
         _ => new[] { Turno.Tarde }
     };
 }

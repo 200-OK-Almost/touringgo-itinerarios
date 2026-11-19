@@ -38,9 +38,6 @@ public class ItinerarioGenerator : IItinerarioGenerator
             return Array.Empty<ParadaItinerario>();
         }
 
-        var objetivo = viaje.AlcanceTemporal == AlcanceTemporal.DiaCompleto ? 4 : 3;
-        objetivo = Math.Min(objetivo, disponibles.Count);
-
         var limiteCuadras = viaje.LimiteCuadrasEntreParadas
             ?? (viaje.RitmoCaminata == RitmoCaminata.Tranquilo ? CuadrasRitmoTranquilo : CuadrasRitmoActivo);
 
@@ -52,9 +49,12 @@ public class ItinerarioGenerator : IItinerarioGenerator
         double? lonAnterior = (double?)(longitudPartida ?? viaje.LongitudPartida);
         Turno? turnoAnterior = null;
 
-        for (var i = 0; i < objetivo; i++)
+        foreach (var turnoAsignado in turnos)
         {
-            var turnoAsignado = turnos[i % turnos.Count];
+            if (disponibles.Count == 0)
+            {
+                break;
+            }
 
             var seleccion = latAnterior.HasValue && lonAnterior.HasValue
                 ? ElegirDelConjunto(disponibles, latAnterior.Value, lonAnterior.Value, limiteCuadras)
@@ -144,8 +144,9 @@ public class ItinerarioGenerator : IItinerarioGenerator
     private static int HoraBaseMinutos(Turno turno) => turno switch
     {
         Turno.Manana => 9 * 60,
-        Turno.Tarde => 14 * 60,
-        Turno.Noche => 19 * 60,
+        Turno.Mediodia => 13 * 60,
+        Turno.Tarde => 16 * 60,
+        Turno.Noche => 20 * 60,
         _ => 9 * 60
     };
 
@@ -157,9 +158,15 @@ public class ItinerarioGenerator : IItinerarioGenerator
 
     private static IReadOnlyList<Turno> TurnosSegunAlcance(AlcanceTemporal alcance) => alcance switch
     {
-        AlcanceTemporal.DiaCompleto => new[] { Turno.Manana, Turno.Tarde, Turno.Noche },
+        AlcanceTemporal.DiaCompleto => new[]
+        {
+            Turno.Manana,
+            Turno.Mediodia,
+            Turno.Tarde,
+            Turno.Noche
+        },
         AlcanceTemporal.TardeNoche => new[] { Turno.Tarde, Turno.Noche },
-        AlcanceTemporal.MananaAlmuerzo => new[] { Turno.Manana, Turno.Tarde },
+        AlcanceTemporal.MananaAlmuerzo => new[] { Turno.Manana, Turno.Mediodia },
         _ => new[] { Turno.Tarde }
     };
 

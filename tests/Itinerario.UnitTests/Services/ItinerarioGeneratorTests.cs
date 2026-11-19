@@ -26,7 +26,7 @@ public class ItinerarioGeneratorTests
     }
 
     [Fact]
-    public void Generar_MedioDia_GeneraHastaTresParadas()
+    public void Generar_TardeNoche_GeneraHastaDosParadas()
     {
         var viaje = CrearViaje(AlcanceTemporal.TardeNoche);
         var lugares = new[]
@@ -39,11 +39,11 @@ public class ItinerarioGeneratorTests
 
         var paradas = CrearGenerator().Generar(viaje, lugares);
 
-        Assert.Equal(3, paradas.Count);
+        Assert.Equal(2, paradas.Count);
     }
 
     [Fact]
-    public void Generar_AsignaTurnoPorOrdenDelRecorrido()
+    public void Generar_AsignaTurnosEnOrdenDelDia()
     {
         var viaje = CrearViaje(AlcanceTemporal.DiaCompleto);
         var lugares = new[]
@@ -57,8 +57,8 @@ public class ItinerarioGeneratorTests
 
         Assert.Equal(3, paradas.Count);
         Assert.Equal(Turno.Manana, paradas[0].Turno);
-        Assert.Equal(Turno.Tarde, paradas[1].Turno);
-        Assert.Equal(Turno.Noche, paradas[2].Turno);
+        Assert.Equal(Turno.Mediodia, paradas[1].Turno);
+        Assert.Equal(Turno.Tarde, paradas[2].Turno);
     }
 
     [Fact]
