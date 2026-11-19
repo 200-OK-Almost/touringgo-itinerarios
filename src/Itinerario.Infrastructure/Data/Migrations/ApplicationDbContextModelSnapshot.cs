@@ -17,7 +17,7 @@ namespace Itinerario.Infrastructure.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.33")
+                .HasAnnotation("ProductVersion", "8.0.34")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -35,6 +35,21 @@ namespace Itinerario.Infrastructure.Data.Migrations
                     b.HasKey("ViajeId", "CategoriaCodigo");
 
                     b.ToTable("etiquetas_viaje", (string)null);
+                });
+
+            modelBuilder.Entity("Itinerario.Domain.Entities.EtiquetaViajeDia", b =>
+                {
+                    b.Property<Guid>("ViajeDiaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("viaje_dia_id");
+
+                    b.Property<string>("CategoriaCodigo")
+                        .HasColumnType("text")
+                        .HasColumnName("categoria_codigo");
+
+                    b.HasKey("ViajeDiaId", "CategoriaCodigo");
+
+                    b.ToTable("etiquetas_viaje_dia", (string)null);
                 });
 
             modelBuilder.Entity("Itinerario.Domain.Entities.Itinerario", b =>
@@ -343,6 +358,71 @@ namespace Itinerario.Infrastructure.Data.Migrations
                     b.ToTable("viajes", (string)null);
                 });
 
+            modelBuilder.Entity("Itinerario.Domain.Entities.ViajeDia", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Barrio")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("barrio");
+
+                    b.Property<string>("DireccionPartida")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("direccion_partida");
+
+                    b.Property<DateOnly?>("Fecha")
+                        .HasColumnType("date")
+                        .HasColumnName("fecha");
+
+                    b.Property<decimal?>("LatitudPartida")
+                        .HasPrecision(10, 8)
+                        .HasColumnType("numeric(10,8)")
+                        .HasColumnName("latitud_partida");
+
+                    b.Property<decimal?>("LongitudPartida")
+                        .HasPrecision(11, 8)
+                        .HasColumnType("numeric(11,8)")
+                        .HasColumnName("longitud_partida");
+
+                    b.Property<Guid?>("LugarPartidaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lugar_partida_id");
+
+                    b.Property<string>("NombrePuntoPartida")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("nombre_punto_partida");
+
+                    b.Property<short>("NumeroDia")
+                        .HasColumnType("smallint")
+                        .HasColumnName("numero_dia");
+
+                    b.Property<string>("TipoPuntoPartida")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("tipo_punto_partida");
+
+                    b.Property<string>("TipoViaje")
+                        .HasColumnType("text")
+                        .HasColumnName("tipo_viaje");
+
+                    b.Property<Guid>("ViajeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("viaje_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ViajeId", "NumeroDia")
+                        .IsUnique();
+
+                    b.ToTable("dias_viaje", (string)null);
+                });
+
             modelBuilder.Entity("Itinerario.Domain.Entities.EtiquetaViaje", b =>
                 {
                     b.HasOne("Itinerario.Domain.Entities.Viaje", "Viaje")
@@ -352,6 +432,17 @@ namespace Itinerario.Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Viaje");
+                });
+
+            modelBuilder.Entity("Itinerario.Domain.Entities.EtiquetaViajeDia", b =>
+                {
+                    b.HasOne("Itinerario.Domain.Entities.ViajeDia", "Dia")
+                        .WithMany("Etiquetas")
+                        .HasForeignKey("ViajeDiaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Dia");
                 });
 
             modelBuilder.Entity("Itinerario.Domain.Entities.Itinerario", b =>
@@ -398,6 +489,17 @@ namespace Itinerario.Infrastructure.Data.Migrations
                     b.Navigation("Viaje");
                 });
 
+            modelBuilder.Entity("Itinerario.Domain.Entities.ViajeDia", b =>
+                {
+                    b.HasOne("Itinerario.Domain.Entities.Viaje", "Viaje")
+                        .WithMany("Dias")
+                        .HasForeignKey("ViajeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Viaje");
+                });
+
             modelBuilder.Entity("Itinerario.Domain.Entities.Itinerario", b =>
                 {
                     b.Navigation("Paradas");
@@ -405,6 +507,8 @@ namespace Itinerario.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("Itinerario.Domain.Entities.Viaje", b =>
                 {
+                    b.Navigation("Dias");
+
                     b.Navigation("Etiquetas");
 
                     b.Navigation("Itinerarios");
@@ -412,6 +516,11 @@ namespace Itinerario.Infrastructure.Data.Migrations
                     b.Navigation("Miembros");
 
                     b.Navigation("ParametrosFamilia");
+                });
+
+            modelBuilder.Entity("Itinerario.Domain.Entities.ViajeDia", b =>
+                {
+                    b.Navigation("Etiquetas");
                 });
 #pragma warning restore 612, 618
         }

@@ -12,4 +12,5 @@ public class LugarCandidatoDto
     public NivelPresupuesto NivelPrecio { get; set; }
     public bool EsAireLibre { get; set; }
     public short DuracionSugeridaMinutos { get; set; }
+    public IReadOnlyCollection<string> Categorias { get; set; } = new List<string>();
 }

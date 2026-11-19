@@ -7,5 +7,7 @@ public interface IItinerarioGenerator
 {
     IReadOnlyCollection<ParadaItinerario> Generar(
         Viaje viaje,
-        IReadOnlyCollection<LugarCandidatoDto> lugares);
+        IReadOnlyCollection<LugarCandidatoDto> lugares,
+        decimal? latitudPartida = null,
+        decimal? longitudPartida = null);
 }

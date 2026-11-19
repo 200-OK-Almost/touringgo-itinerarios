@@ -26,7 +26,7 @@ public class ItinerarioGeneratorTests
     }
 
     [Fact]
-    public void Generar_MedioDia_GeneraHastaTresParadas()
+    public void Generar_TardeNoche_GeneraHastaDosParadas()
     {
         var viaje = CrearViaje(AlcanceTemporal.TardeNoche);
         var lugares = new[]
@@ -39,11 +39,11 @@ public class ItinerarioGeneratorTests
 
         var paradas = CrearGenerator().Generar(viaje, lugares);
 
-        Assert.Equal(3, paradas.Count);
+        Assert.Equal(2, paradas.Count);
     }
 
     [Fact]
-    public void Generar_AsignaTurnoPorOrdenDelRecorrido()
+    public void Generar_AsignaTurnosEnOrdenDelDia()
     {
         var viaje = CrearViaje(AlcanceTemporal.DiaCompleto);
         var lugares = new[]
@@ -57,8 +57,8 @@ public class ItinerarioGeneratorTests
 
         Assert.Equal(3, paradas.Count);
         Assert.Equal(Turno.Manana, paradas[0].Turno);
-        Assert.Equal(Turno.Tarde, paradas[1].Turno);
-        Assert.Equal(Turno.Noche, paradas[2].Turno);
+        Assert.Equal(Turno.Mediodia, paradas[1].Turno);
+        Assert.Equal(Turno.Tarde, paradas[2].Turno);
     }
 
     [Fact]
@@ -92,6 +92,22 @@ public class ItinerarioGeneratorTests
         };
 
         var paradas = CrearGenerator(metrosEntreLugares: 500).Generar(viaje, lugares);
+
+        Assert.Empty(paradas);
+    }
+
+    [Fact]
+    public void Generar_UsaElOrigenDelDia_SiSeProporciona()
+    {
+        var viaje = CrearViaje(limiteCuadras: 4);
+        var lugares = new[]
+        {
+            CrearLugar(),
+            CrearLugar()
+        };
+
+        var paradas = CrearGenerator(metrosEntreLugares: 500)
+            .Generar(viaje, lugares, -34.58m, -58.42m);
 
         Assert.Empty(paradas);
     }
@@ -156,6 +172,55 @@ public class ItinerarioGeneratorTests
         Assert.Equal(paradas.Count, paradas.Select(p => p.LugarId).Distinct().Count());
     }
 
+    [Fact]
+    public void Generar_RespetaLaCategoriaDeCadaTurno()
+    {
+        var viaje = CrearViaje(AlcanceTemporal.DiaCompleto);
+        var cafe = CrearLugar(
+            NivelPresupuesto.SinRestricciones,
+            "cafe_especialidad");
+        var restaurante = CrearLugar(
+            NivelPresupuesto.SinRestricciones,
+            "gastronomia_clasica");
+        var bar = CrearLugar(
+            NivelPresupuesto.SinRestricciones,
+            "bares_vermu");
+        var cocteleria = CrearLugar(
+            NivelPresupuesto.SinRestricciones,
+            "cocteleria_autor");
+
+        var paradas = CrearGenerator()
+            .Generar(viaje, new[] { cafe, restaurante, bar, cocteleria })
+            .ToList();
+
+        Assert.Equal(4, paradas.Count);
+        Assert.Equal(Turno.Manana, paradas[0].Turno);
+        Assert.Equal(cafe.Id, paradas[0].LugarId);
+        Assert.Equal(Turno.Mediodia, paradas[1].Turno);
+        Assert.Equal(restaurante.Id, paradas[1].LugarId);
+        Assert.Equal(Turno.Tarde, paradas[2].Turno);
+        Assert.Equal(bar.Id, paradas[2].LugarId);
+        Assert.Equal(Turno.Noche, paradas[3].Turno);
+        Assert.Equal(cocteleria.Id, paradas[3].LugarId);
+    }
+
+    [Fact]
+    public void Generar_SinCandidatosCompatibles_UsaCualquierLugar()
+    {
+        var viaje = CrearViaje(AlcanceTemporal.DiaCompleto);
+        var lugares = new[]
+        {
+            CrearLugar(NivelPresupuesto.SinRestricciones, "museos_galerias"),
+            CrearLugar(NivelPresupuesto.SinRestricciones, "museos_galerias"),
+            CrearLugar(NivelPresupuesto.SinRestricciones, "museos_galerias"),
+            CrearLugar(NivelPresupuesto.SinRestricciones, "museos_galerias")
+        };
+
+        var paradas = CrearGenerator().Generar(viaje, lugares);
+
+        Assert.Equal(4, paradas.Count);
+    }
+
     private static ItinerarioGenerator CrearGenerator(double metrosEntreLugares = 100)
         => new(new GeoFalso(metrosEntreLugares));
 
@@ -190,7 +255,8 @@ public class ItinerarioGeneratorTests
             null);
 
     private static LugarCandidatoDto CrearLugar(
-        NivelPresupuesto nivel = NivelPresupuesto.Economico)
+        NivelPresupuesto nivel = NivelPresupuesto.Economico,
+        params string[] categorias)
         => new()
         {
             Id = Guid.NewGuid(),
@@ -199,7 +265,8 @@ public class ItinerarioGeneratorTests
             Longitud = -58.42m,
             NivelPrecio = nivel,
             EsAireLibre = false,
-            DuracionSugeridaMinutos = 60
+            DuracionSugeridaMinutos = 60,
+            Categorias = categorias
         };
 
     private sealed class GeoFalso : IGeoCalculator

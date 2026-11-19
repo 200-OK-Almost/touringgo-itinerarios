@@ -21,5 +21,7 @@ public class ViajeCreateDto
     public decimal? LongitudPartida { get; set; }
     public IReadOnlyCollection<string> CategoriaCodigos { get; set; } = new List<string>();
 
+    public IReadOnlyCollection<ViajeDiaCreateDto>? Dias { get; set; }
+
     public ParametrosFamiliaDto? ParametrosFamilia { get; set; }
 }

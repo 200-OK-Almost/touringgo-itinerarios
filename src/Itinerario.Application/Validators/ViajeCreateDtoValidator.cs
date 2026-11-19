@@ -80,6 +80,36 @@ public class ViajeCreateDtoValidator : AbstractValidator<ViajeCreateDto>
             .Must(c => c.All(x => !string.IsNullOrWhiteSpace(x)))
             .WithMessage("Los códigos de categoría no pueden estar vacíos.");
 
+        RuleFor(v => v.FechaInicio)
+            .NotNull()
+            .When(v => v.Dias is { Count: > 0 })
+            .WithMessage("Debe indicar la fecha de inicio y la fecha de fin.");
+
+        RuleFor(v => v.FechaFin)
+            .NotNull()
+            .When(v => v.Dias is { Count: > 0 })
+            .WithMessage("Debe indicar la fecha de inicio y la fecha de fin.");
+
+        RuleFor(v => v.Dias)
+            .Must(dias => dias is null || ViajeDiasValidation.CantidadValida(dias))
+            .WithMessage(CalculadoraDuracion.MensajeRangoInvalido);
+
+        RuleFor(v => v.Dias)
+            .Must(dias => dias is null || ViajeDiasValidation.NumeracionValida(dias))
+            .WithMessage("Los días deben estar numerados de 1 a N sin repetidos.");
+
+        RuleFor(v => v.Dias)
+            .Must((dto, dias) => ViajeDiasValidation.CoincidenConRango(
+                dto.FechaInicio,
+                dto.FechaFin,
+                dias))
+            .When(v => v.Dias is { Count: > 0 })
+            .WithMessage("Los días deben coincidir con el rango de fechas del viaje.");
+
+        RuleForEach(v => v.Dias)
+            .SetValidator(new ViajeDiaCreateDtoValidator())
+            .When(v => v.Dias is not null);
+
         RuleFor(v => v.ParametrosFamilia)
             .Null()
             .When(v => v.TipoViaje != TipoViaje.Familia)

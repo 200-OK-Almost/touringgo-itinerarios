@@ -86,6 +86,57 @@ public class ViajeUpdateDtoValidatorTests
         Assert.True(resultado.IsValid, Mensajes(resultado));
     }
 
+    [Fact]
+    public void DiasValidos_ConRangoCoincidente_EsValido()
+    {
+        var dto = CrearDto(Inicio, Inicio.AddDays(2));
+        dto.Dias = CrearDias(Inicio, 3);
+
+        var resultado = _validator.Validate(dto);
+
+        Assert.True(resultado.IsValid, Mensajes(resultado));
+    }
+
+    [Fact]
+    public void DiaConUnaSolaCategoria_EsInvalido()
+    {
+        var dto = CrearDto(Inicio, Inicio);
+        dto.Dias = CrearDias(Inicio, 1);
+        dto.Dias.First().CategoriaCodigos = new[] { "cafe_especialidad" };
+
+        var resultado = _validator.Validate(dto);
+
+        Assert.False(resultado.IsValid);
+        Assert.Contains(
+            resultado.Errors,
+            error => error.ErrorMessage.Contains("2 y 4"));
+    }
+
+    [Fact]
+    public void DiasQueNoCoincidenConElRango_EsInvalido()
+    {
+        var dto = CrearDto(Inicio, Inicio.AddDays(2));
+        dto.Dias = CrearDias(Inicio.AddDays(1), 3);
+
+        var resultado = _validator.Validate(dto);
+
+        Assert.False(resultado.IsValid);
+        Assert.Contains(
+            resultado.Errors,
+            error => error.ErrorMessage == "Los días deben coincidir con el rango de fechas del viaje.");
+    }
+
+    private static IReadOnlyCollection<ViajeDiaCreateDto> CrearDias(DateOnly inicio, int cantidad)
+        => Enumerable.Range(0, cantidad)
+            .Select(indice => new ViajeDiaCreateDto
+            {
+                NumeroDia = (short)(indice + 1),
+                Fecha = inicio.AddDays(indice),
+                Barrio = BarrioCaba.Palermo,
+                TipoPuntoPartida = TipoPuntoPartida.NodoUrbano
+            })
+            .ToList();
+
     private static ViajeUpdateDto CrearDto(DateOnly? fechaInicio, DateOnly? fechaFin)
         => new()
         {

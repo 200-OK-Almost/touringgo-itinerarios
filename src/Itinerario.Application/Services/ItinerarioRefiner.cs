@@ -35,11 +35,18 @@ public class ItinerarioRefiner : IItinerarioRefiner
             }
 
             var referencia = ReferenciaPara(parada, paradas, itinerario, viaje, lugaresActuales);
+            var compatibles = candidatos
+                .Where(candidato => ReglasTurno.EsCompatible(parada.Turno, candidato))
+                .ToList();
+            ICollection<LugarCandidatoDto> pool = compatibles.Count > 0
+                ? compatibles
+                : candidatos;
+
             var reemplazo = tipo switch
             {
-                TipoRefinamiento.MasEconomico => ElegirMasEconomico(actual, candidatos),
-                TipoRefinamiento.ReducirCaminata => ElegirMasCercano(actual, candidatos, referencia),
-                TipoRefinamiento.MasAireLibre => ElegirAireLibre(actual, candidatos, referencia),
+                TipoRefinamiento.MasEconomico => ElegirMasEconomico(actual, pool),
+                TipoRefinamiento.ReducirCaminata => ElegirMasCercano(actual, pool, referencia),
+                TipoRefinamiento.MasAireLibre => ElegirAireLibre(actual, pool, referencia),
                 _ => null
             };
 
@@ -71,8 +78,17 @@ public class ItinerarioRefiner : IItinerarioRefiner
                 continue;
             }
 
-            var candidato = candidatos
-                .Where(c => DentroDePresupuesto(c.NivelPrecio, viaje.NivelPresupuesto))
+            var compatibles = candidatos
+                .Where(c => ReglasTurno.EsCompatible(turno, c)
+                    && DentroDePresupuesto(c.NivelPrecio, viaje.NivelPresupuesto))
+                .ToList();
+            var pool = compatibles.Count > 0
+                ? compatibles
+                : candidatos
+                    .Where(c => DentroDePresupuesto(c.NivelPrecio, viaje.NivelPresupuesto))
+                    .ToList();
+
+            var candidato = pool
                 .OrderBy(c => c.NivelPrecio)
                 .ThenBy(c => c.Id)
                 .FirstOrDefault();
@@ -227,9 +243,15 @@ public class ItinerarioRefiner : IItinerarioRefiner
 
     private static IReadOnlyList<Turno> TurnosSegunAlcance(AlcanceTemporal alcance) => alcance switch
     {
-        AlcanceTemporal.DiaCompleto => new[] { Turno.Manana, Turno.Tarde, Turno.Noche },
+        AlcanceTemporal.DiaCompleto => new[]
+        {
+            Turno.Manana,
+            Turno.Mediodia,
+            Turno.Tarde,
+            Turno.Noche
+        },
         AlcanceTemporal.TardeNoche => new[] { Turno.Tarde, Turno.Noche },
-        AlcanceTemporal.MananaAlmuerzo => new[] { Turno.Manana, Turno.Tarde },
+        AlcanceTemporal.MananaAlmuerzo => new[] { Turno.Manana, Turno.Mediodia },
         _ => new[] { Turno.Tarde }
     };
 }
