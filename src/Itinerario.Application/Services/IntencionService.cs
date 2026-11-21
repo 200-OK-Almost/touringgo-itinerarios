@@ -56,6 +56,17 @@ public class IntencionService : IIntencionService
         ["cocteleria_autor"] = new[] { "cocteleria", "coctelerias", "coctel", "cocteles", "trago", "tragos" }
     };
 
+    private static readonly Dictionary<string, string[]> CategoriasDetectables = new(StringComparer.Ordinal)
+    {
+        ["cafe_especialidad"] = new[] { "cafe", "cafes", "cafeteria", "cafeterias" },
+        ["museos_galerias"] = new[] { "museo", "museos", "galeria", "galerias" },
+        ["parques_aire_libre"] = new[] { "parque", "parques", "plaza", "plazas" },
+        ["librerias_diseno"] = new[] { "libreria", "librerias", "libro", "libros" },
+        ["bares_vermu"] = new[] { "bar", "bares", "vermu", "vermut" },
+        ["gastronomia_clasica"] = new[] { "restaurante", "restaurantes", "comida", "gastronomia" },
+        ["cocteleria_autor"] = new[] { "cocteleria", "coctelerias", "coctel", "cocteles", "trago", "tragos" }
+    };
+
     private static readonly HashSet<string> PalabrasIgnoradas = new(StringComparer.Ordinal)
     {
         "el", "la", "los", "las", "un", "una", "unos", "unas",
@@ -70,9 +81,29 @@ public class IntencionService : IIntencionService
         "agrega", "agregar", "agregame", "suma", "sumar", "sumame",
         "anade", "anadir", "anadime", "anadi", "incluye", "incluir", "inclui",
         "mete", "meter", "pon", "pone", "poner",
-        "algo", "otro", "otra",
+        "recomenda", "recomendar", "recomendame", "recomendas", "recomendarias",
+        "sugeri", "sugerir", "sugerime", "sugeris",
+        "opcion", "opciones", "idea", "ideas", "alternativa", "alternativas",
+        "dame", "dime", "decime", "mostrame", "quiero", "queria",
+        "podrias", "podes", "puedo", "puede", "hay",
+        "algo", "otro", "otra", "tambien", "solo", "aqui", "ahi", "alli", "favor",
         "primera", "primer", "segunda", "segundo", "tercer", "tercera",
         "cuarta", "cuarto", "quinta", "quinto", "ultima", "ultimo"
+    };
+
+    private static readonly HashSet<string> PalabrasIgnoradasQuery = new(PalabrasIgnoradas, StringComparer.Ordinal)
+    {
+        "cerca", "cercano", "cercana", "cercanos", "cercanas",
+        "proximo", "proxima", "proximos", "proximas",
+        "barrio", "zona", "palermo", "recoleta", "santelmo", "san", "sannicolas", "nicolas",
+        "puerto", "madero", "puertomadero",
+        "economico", "economica", "barato", "barata",
+        "equilibrado", "equilibrada", "moderado", "moderada",
+        "caro", "cara", "presupuesto",
+        "ninos", "ninas", "familia", "chicos", "chicas", "infantil",
+        "accesible", "silla", "ruedas", "movilidad", "reducida", "discapacidad",
+        "vegano", "vegana", "vegetariano", "vegetariana", "celiaco", "celiaca",
+        "kosher", "halal", "gluten", "tacc", "lactosa", "sin"
     };
 
     public string Normalizar(string? texto)
@@ -176,6 +207,220 @@ public class IntencionService : IIntencionService
         };
     }
 
+    public IntencionAsistenteDto Interpretar(
+        string? mensaje,
+        IReadOnlyCollection<ParadaResolubleDto>? paradas = null,
+        double radioMetrosDefault = 800)
+    {
+        var normalizado = Normalizar(mensaje);
+        var accion = DetectarAccion(mensaje);
+
+        var intencion = new IntencionAsistenteDto
+        {
+            Accion = accion,
+            Filtros = ExtraerFiltros(normalizado),
+            RadioMetros = MencionaCercania(normalizado) ? radioMetrosDefault : null
+        };
+
+        if (accion == TipoAccionAsistente.Reemplazar && paradas is { Count: > 0 })
+        {
+            var resolucion = ResolverParadaObjetivo(mensaje, paradas);
+            intencion.ParadaObjetivo = resolucion.Parada;
+            intencion.Aclaracion = resolucion.Aclaracion;
+        }
+
+        intencion.QuerySemantica = ConstruirQuery(normalizado, accion, intencion.ParadaObjetivo);
+
+        return intencion;
+    }
+
+    private static FiltrosIntencionDto ExtraerFiltros(string normalizado)
+    {
+        var bajoTecho = ContieneAlguna(normalizado, new[]
+        {
+            "bajo techo", "lluvia", "adentro", "cubierto"
+        });
+
+        var aireLibre = ContieneAlguna(normalizado, new[]
+        {
+            "aire libre", "al aire libre", "afuera", "outdoor"
+        });
+
+        return new FiltrosIntencionDto
+        {
+            CategoriaCodigos = DetectarCategorias(normalizado),
+            SoloAlAireLibre = !bajoTecho && aireLibre ? true : null,
+            SoloBajoTecho = bajoTecho ? true : null,
+            AptoNinos = ContieneAlguna(normalizado, new[]
+            {
+                "ninos", "ninas", "familia", "chicos", "chicas", "infantil"
+            })
+                ? true
+                : null,
+            AccesibleMovilidadReducida = ContieneAlguna(normalizado, new[]
+            {
+                "accesible", "silla de ruedas", "movilidad reducida", "discapacidad"
+            })
+                ? true
+                : null,
+            RestriccionDietaria = DetectarDieta(normalizado),
+            Turno = DetectarTurno(normalizado),
+            NivelPrecioMaximo = DetectarPrecio(normalizado)
+        };
+    }
+
+    private static IReadOnlyCollection<string> DetectarCategorias(string normalizado)
+        => CategoriasDetectables
+            .Where(categoria => categoria.Value.Any(alias => ContienePalabra(normalizado, alias)))
+            .Select(categoria => categoria.Key)
+            .ToList();
+
+    private static string? DetectarDieta(string normalizado)
+    {
+        var dietas = new (string Termino, string Valor)[]
+        {
+            ("sin gluten", "sin gluten"),
+            ("sin tacc", "sin tacc"),
+            ("sin lactosa", "sin lactosa"),
+            ("vegetariano", "vegetariano"),
+            ("vegetariana", "vegetariano"),
+            ("vegano", "vegano"),
+            ("vegana", "vegano"),
+            ("celiaco", "celiaco"),
+            ("celiaca", "celiaco"),
+            ("kosher", "kosher"),
+            ("halal", "halal")
+        };
+
+        foreach (var (termino, valor) in dietas)
+        {
+            if (ContienePalabra(normalizado, termino))
+            {
+                return valor;
+            }
+        }
+
+        return null;
+    }
+
+    private static Turno? DetectarTurno(string normalizado)
+    {
+        var turnos = new (string Palabra, Turno Turno)[]
+        {
+            ("manana", Turno.Manana),
+            ("mediodia", Turno.Mediodia),
+            ("tarde", Turno.Tarde),
+            ("noche", Turno.Noche)
+        };
+
+        return turnos
+            .Select(turno => (turno.Turno, Indice: IndicePalabra(normalizado, turno.Palabra)))
+            .Where(turno => turno.Indice >= 0)
+            .OrderBy(turno => turno.Indice)
+            .Select(turno => (Turno?)turno.Turno)
+            .FirstOrDefault();
+    }
+
+    private static short? DetectarPrecio(string normalizado)
+    {
+        if (ContieneAlguna(normalizado, new[] { "economico", "economica", "barato", "barata" }))
+        {
+            return 1;
+        }
+
+        if (ContieneAlguna(normalizado, new[] { "equilibrado", "equilibrada", "moderado", "moderada" }))
+        {
+            return 2;
+        }
+
+        return null;
+    }
+
+    private static bool MencionaCercania(string normalizado)
+        => ContieneAlguna(normalizado, new[]
+        {
+            "cerca", "cercano", "cercana", "cercanos", "cercanas",
+            "proximo", "proxima", "proximos", "proximas",
+            "a pocas cuadras", "caminando"
+        });
+
+    private string ConstruirQuery(
+        string normalizado,
+        TipoAccionAsistente accion,
+        ParadaObjetivoDto? parada)
+    {
+        var texto = accion == TipoAccionAsistente.Reemplazar
+            ? ExtraerTextoDeseado(normalizado)
+            : normalizado;
+
+        if (parada is not null)
+        {
+            texto = QuitarNombreParada(texto, parada);
+        }
+
+        var tokens = Regex.Split(texto, @"\s+")
+            .Where(token => token.Length >= 3 && !PalabrasIgnoradasQuery.Contains(token))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        return tokens.Count == 0 ? "lugar" : string.Join(" ", tokens);
+    }
+
+    private static string ExtraerTextoDeseado(string normalizado)
+    {
+        var indicePor = normalizado.IndexOf(" por ", StringComparison.Ordinal);
+        if (indicePor >= 0)
+        {
+            return normalizado[(indicePor + " por ".Length)..];
+        }
+
+        var indiceEnVezDe = normalizado.IndexOf("en vez de ", StringComparison.Ordinal);
+        if (indiceEnVezDe >= 0)
+        {
+            return normalizado[(indiceEnVezDe + "en vez de ".Length)..];
+        }
+
+        var indiceEnLugarDe = normalizado.IndexOf("en lugar de ", StringComparison.Ordinal);
+        if (indiceEnLugarDe >= 0)
+        {
+            return normalizado[(indiceEnLugarDe + "en lugar de ".Length)..];
+        }
+
+        return string.Empty;
+    }
+
+    private string QuitarNombreParada(string texto, ParadaObjetivoDto parada)
+    {
+        var tokens = ObtenerTokens(Normalizar(parada.Nombre));
+
+        foreach (var token in tokens)
+        {
+            texto = Regex.Replace(
+                texto,
+                $@"\b{Regex.Escape(token)}\b",
+                " ",
+                RegexOptions.CultureInvariant);
+        }
+
+        return texto;
+    }
+
+    private static int IndicePalabra(string texto, string palabra)
+    {
+        var match = Regex.Match(
+            texto,
+            $@"\b{Regex.Escape(palabra)}\b",
+            RegexOptions.CultureInvariant);
+
+        return match.Success ? match.Index : -1;
+    }
+
+    private static bool ContienePalabra(string texto, string palabra)
+        => Regex.IsMatch(
+            texto,
+            $@"\b{Regex.Escape(palabra)}\b",
+            RegexOptions.CultureInvariant);
+
     private static string ObtenerTextoObjetivo(string normalizado)
     {
         var indicePor = normalizado.IndexOf(" por ", StringComparison.Ordinal);
@@ -184,16 +429,16 @@ public class IntencionService : IIntencionService
             return normalizado[..indicePor].Trim();
         }
 
-        var indiceEnVezDe = normalizado.IndexOf(" en vez de ", StringComparison.Ordinal);
+        var indiceEnVezDe = normalizado.IndexOf("en vez de ", StringComparison.Ordinal);
         if (indiceEnVezDe >= 0)
         {
-            return normalizado[(indiceEnVezDe + " en vez de ".Length)..].Trim();
+            return normalizado[(indiceEnVezDe + "en vez de ".Length)..].Trim();
         }
 
-        var indiceEnLugarDe = normalizado.IndexOf(" en lugar de ", StringComparison.Ordinal);
+        var indiceEnLugarDe = normalizado.IndexOf("en lugar de ", StringComparison.Ordinal);
         if (indiceEnLugarDe >= 0)
         {
-            return normalizado[(indiceEnLugarDe + " en lugar de ".Length)..].Trim();
+            return normalizado[(indiceEnLugarDe + "en lugar de ".Length)..].Trim();
         }
 
         return normalizado;
@@ -309,8 +554,5 @@ public class IntencionService : IIntencionService
             || ContieneAlguna(normalizado, FrasesRecomendar);
 
     private static bool ContieneAlguna(string normalizado, IEnumerable<string> frases)
-        => frases.Any(frase => Regex.IsMatch(
-            normalizado,
-            $@"\b{Regex.Escape(frase)}\b",
-            RegexOptions.CultureInvariant));
+        => frases.Any(frase => ContienePalabra(normalizado, frase));
 }

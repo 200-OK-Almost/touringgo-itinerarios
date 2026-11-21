@@ -12,4 +12,9 @@ public interface IIntencionService
     ResolucionParadaObjetivoDto ResolverParadaObjetivo(
         string? mensaje,
         IReadOnlyCollection<ParadaResolubleDto> paradas);
+
+    IntencionAsistenteDto Interpretar(
+        string? mensaje,
+        IReadOnlyCollection<ParadaResolubleDto>? paradas = null,
+        double radioMetrosDefault = 800);
 }
