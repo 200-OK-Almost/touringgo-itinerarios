@@ -139,6 +139,32 @@ public class ViajesController : ControllerBase
         return Ok(respuesta);
     }
 
+    [HttpPost("{id:guid}/asistente/aplicar")]
+    [EnableRateLimiting(AsistenteRateLimitPolicies.Viaje)]
+    [ProducesResponseType(typeof(IReadOnlyCollection<ItinerarioResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<IReadOnlyCollection<ItinerarioResponseDto>>> AplicarAccionAsistente(
+        Guid id,
+        [FromBody] AplicarAccionAsistenteDto dto,
+        CancellationToken cancellationToken)
+    {
+        if (!_asistenteOptions.Value.Enabled)
+        {
+            return NotFound(new { mensaje = "El asistente no está habilitado." });
+        }
+
+        var itinerarios = await _itinerarioService.AplicarAccionAsistenteAsync(
+            id,
+            dto,
+            _currentUser.UsuarioId,
+            cancellationToken);
+
+        return Ok(itinerarios);
+    }
+
     [HttpPost("{id:guid}/refinar")]
     [ProducesResponseType(typeof(IReadOnlyCollection<ItinerarioResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

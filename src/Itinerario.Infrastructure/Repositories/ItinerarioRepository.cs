@@ -64,7 +64,16 @@ public class ItinerarioRepository : IItinerarioRepository
     {
         try
         {
-            return await _context.SaveChangesAsync(cancellationToken);
+            var cambios = await _context.SaveChangesAsync(cancellationToken);
+
+            var itinerarios = _context.ChangeTracker
+                .Entries<ItinerarioEntity>()
+                .Select(e => e.Entity)
+                .ToList();
+
+            ItinerarioVersionLoader.Cargar(_context, itinerarios);
+
+            return cambios;
         }
         catch (DbUpdateConcurrencyException)
         {

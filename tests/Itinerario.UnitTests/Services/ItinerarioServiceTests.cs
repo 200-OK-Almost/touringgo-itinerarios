@@ -254,6 +254,7 @@ public class ItinerarioServiceTests
             lugares,
             new ItinerarioGenerator(geo),
             new ItinerarioRefiner(geo),
+            geo,
             new UsuariosClientFalso(),
             new OllamaClientFalso(),
             new InterpretacionServiceFalso());
