@@ -1,7 +1,9 @@
+using Itinerario.Application.Configuration;
 using Itinerario.Application.DTOs;
 using Itinerario.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace Itinerario.API.Controllers;
 
@@ -14,17 +16,20 @@ public class ViajesController : ControllerBase
     private readonly IItinerarioService _itinerarioService;
     private readonly IInterpretacionService _interpretacionService;
     private readonly ICurrentUser _currentUser;
+    private readonly IOptions<AsistenteOptions> _asistenteOptions;
 
     public ViajesController(
         IViajeService service,
         IItinerarioService itinerarioService,
         IInterpretacionService interpretacionService,
-        ICurrentUser currentUser)
+        ICurrentUser currentUser,
+        IOptions<AsistenteOptions> asistenteOptions)
     {
         _service = service;
         _itinerarioService = itinerarioService;
         _interpretacionService = interpretacionService;
         _currentUser = currentUser;
+        _asistenteOptions = asistenteOptions;
     }
 
     [HttpPost]
@@ -53,6 +58,11 @@ public class ViajesController : ControllerBase
         [FromQuery] int tamano = 20,
         CancellationToken cancellationToken = default)
         => Ok(await _service.ObtenerTodosAsync(_currentUser.UsuarioId, pagina, tamano, cancellationToken));
+
+    [HttpGet("asistente/capacidades")]
+    [ProducesResponseType(typeof(AsistenteCapacidadesDto), StatusCodes.Status200OK)]
+    public ActionResult<AsistenteCapacidadesDto> ObtenerCapacidadesAsistente()
+        => Ok(AsistenteCapacidadesDto.Desde(_asistenteOptions.Value));
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ViajeResponseDto>> ObtenerPorId(
