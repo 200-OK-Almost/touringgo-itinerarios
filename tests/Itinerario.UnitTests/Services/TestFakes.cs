@@ -318,7 +318,8 @@ internal static class TestData
         string categoria = "cafe_especialidad",
         short duracionMinutos = 60,
         decimal latitud = -34.58m,
-        decimal longitud = -58.42m)
+        decimal longitud = -58.42m,
+        IReadOnlyCollection<string>? opcionesDietarias = null)
         => new()
         {
             Id = Guid.NewGuid(),
@@ -333,6 +334,6 @@ internal static class TestData
             EsBajoTecho = true,
             AptoNinos = true,
             AccesibleMovilidadReducida = true,
-            OpcionesDietarias = Array.Empty<string>()
+            OpcionesDietarias = opcionesDietarias ?? Array.Empty<string>()
         };
 }
