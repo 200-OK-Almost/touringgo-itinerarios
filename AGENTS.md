@@ -1,6 +1,6 @@
 # AGENTS.md — Microservicio Itinerarios
 
-Contexto para trabajar con opencode en `turinggo-itinerarios`. Asistente de planificación urbana y salidas grupales en CABA (recorridos a pie de 3-4 paradas por barrio, con cuadras y minutos entre paradas). Modos: Solo, Familia, Amigos. La IA (Ollama) traduce elecciones en paradas y refina por texto. La Fase 0 del asistente RAG agrega contratos, configuración, capacidades, rate limiting y telemetría; todavía no hay chat funcional.
+Contexto para trabajar con opencode en `turinggo-itinerarios`. Asistente de planificación urbana y salidas grupales en CABA (recorridos a pie de 3-4 paradas por barrio, con cuadras y minutos entre paradas). Modos: Solo, Familia, Amigos. La IA (Ollama) traduce elecciones en paradas y refina por texto. El asistente RAG tiene contratos, capacidades, rate limiting, telemetría, consulta determinista y aplicación de acciones con `xmin`; todavía no tiene intención ni LLM conversacional.
 
 ## Stack y arquitectura
 
@@ -13,7 +13,7 @@ Contexto para trabajar con opencode en `turinggo-itinerarios`. Asistente de plan
   - `tests/Itinerario.UnitTests` → xUnit, referencia a `Itinerario.Application` e `Itinerario.Infrastructure`.
 - Dirección de dependencias: `API → Application + Infrastructure`; `Infrastructure → Application + Domain`; `Application → Domain`.
 - Base de datos: `itinerarios_db` (database-per-service).
-- Endpoints: `POST /api/viajes`, `GET /api/viajes?pagina&tamano`, `GET /api/viajes/{id}`, `PUT /api/viajes/{id}`, `DELETE /api/viajes/{id}`, `POST /api/viajes/unirse`, `POST /api/viajes/{id}/itinerario`, `GET /api/viajes/{id}/itinerario`, `POST /api/viajes/{id}/refinar`, `POST /api/viajes/{id}/sugerencias-turnos-libres`, `GET /api/viajes/asistente/capacidades`.
+- Endpoints: `POST /api/viajes`, `GET /api/viajes?pagina&tamano`, `GET /api/viajes/{id}`, `PUT /api/viajes/{id}`, `DELETE /api/viajes/{id}`, `POST /api/viajes/unirse`, `POST /api/viajes/{id}/itinerario`, `GET /api/viajes/{id}/itinerario`, `POST /api/viajes/{id}/refinar`, `POST /api/viajes/{id}/sugerencias-turnos-libres`, `GET /api/viajes/asistente/capacidades`, `POST /api/viajes/{id}/asistente`, `POST /api/viajes/{id}/asistente/aplicar`.
 
 ## Reglas de oro (microservicios)
 
@@ -72,11 +72,12 @@ Fase 6 (refinamientos y sugerencias de turno libre): `ItinerarioRefiner` puro co
 
 IA — Ollama + embeddings: `OllamaClient` (`/v1/chat/completions`, JSON mode) e `InterpretacionService` (`POST /api/viajes/bosquejo` NL→parámetros y refinar por texto), `UsuariosClient` (`GET /api/me/perfil` reenviando el token del usuario), `LugaresClient.BuscarSemanticoAsync` (`POST /api/lugares`, búsqueda por embeddings/pgvector de Lugares), `ItinerarioService.GenerarAsync` personaliza (perfil → intención → semántico con filtro por barrio y fallback al catálogo → determinista → `sugerencia_ia` por parada), sugerencias de turnos libres con candidatos semánticos. Config: `Ollama:BaseUrl/Model`, `Usuarios:BaseUrl`. Degradación: si Ollama/Usuarios/embeddings caen, la generación determinista sigue.
 
-Asistente RAG — Fase 0: contratos en `Itinerario.Application/DTOs` (`AsistenteRequestDto`, `AsistenteResponseDto`, `RecomendacionLugarDto`, `AccionPropuestaDto`, `AplicarAccionAsistenteDto`, `AclaracionDto`), `AsistenteOptions` bindeadas desde la sección `Asistente` y validadas al arrancar, `GET /api/viajes/asistente/capacidades` (auth requerida, devuelve `{ habilitado, limites }`), rate limiting (`asistente-usuario`, `asistente-viaje`, 429 + `Retry-After`) y `IAsistenteTelemetry` (tiempos y resultados, sin contenido salvo `Asistente:VerboseLogging`). `Version` en contratos se materializará con `xmin` en Fase 1.4. Detalle en `docs/asistente-rag.md`.
+Asistente RAG — Fase 0 + Fase 1 determinista: contratos en `Itinerario.Application/DTOs`, `AsistenteOptions` bindeadas y validadas, `GET /api/viajes/asistente/capacidades` (`{ habilitado, limites }`), rate limiting (`asistente-usuario`, `asistente-viaje`, 429 + `Retry-After`) y `IAsistenteTelemetry` (tiempos/resultados, sin contenido salvo `Asistente:VerboseLogging`). `LugaresClient` envía filtros duros y mapea descripción, rating, dietas, características y foto. `AsistenteService` determinista valida miembro/día, hidrata paradas, consulta Lugares, usa fallback y devuelve recomendaciones con `PuedeAplicar`. `POST /api/viajes/{id}/asistente/aplicar` agrega/reemplaza paradas solo para administradores, revalida `Version` (`xmin` del `Itinerario`), calcula métricas y fuerza el bump de `FechaActualizacion` en el mismo `SaveChanges`. Sin intención ni LLM conversacional todavía. Detalle en `docs/asistente-rag.md`.
 
 Limitaciones conocidas:
 
 - **Turno por orden**: el turno se asigna por posición (1ª=Manana, 2ª=Tarde, …), no por horario real del lugar; un lugar puede quedar en un turno en el que no abre. A resolver con horarios de apertura.
+- **Asistente determinista**: todavía no hay detección de intención ni LLM; el mensaje se usa como query y las reglas de cercanía/aire libre son simples.
 - **CSRF**: el JWT también llega por cookie `access_token` (HttpOnly, `SameSite=Lax`); los endpoints que mutan no validan token anti-forgery (mitigado por SameSite + gateway same-site).
 
 Antes de dar una tarea por terminada: `dotnet build Itinerario.sln` sin errores y `dotnet test` en verde.
