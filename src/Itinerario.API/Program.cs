@@ -1,13 +1,18 @@
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using Itinerario.API.Extensions;
 using Itinerario.API.Filters;
+using Itinerario.API.RateLimiting;
 using Itinerario.API.Services;
 using Itinerario.Application;
+using Itinerario.Application.Configuration;
 using Itinerario.Application.Interfaces;
 using Itinerario.Infrastructure;
 using Itinerario.Infrastructure.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -20,6 +25,38 @@ builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddApplication();
+
+builder.Services
+    .AddOptions<AsistenteOptions>()
+    .Bind(builder.Configuration.GetSection(AsistenteOptions.SectionName))
+    .Validate(o => o.TopK > 0, "Asistente:TopK debe ser mayor que cero.")
+    .Validate(o => o.MinResultados > 0, "Asistente:MinResultados debe ser mayor que cero.")
+    .Validate(
+        o => o.MinResultados <= o.TopK,
+        "Asistente:MinResultados no puede superar a Asistente:TopK.")
+    .Validate(
+        o => !o.SimilitudMinima.HasValue
+            || (o.SimilitudMinima.Value >= 0 && o.SimilitudMinima.Value <= 1),
+        "Asistente:SimilitudMinima debe estar entre 0 y 1.")
+    .Validate(o => o.RadioMetrosDefault > 0, "Asistente:RadioMetrosDefault debe ser mayor que cero.")
+    .Validate(o => o.MaxMensajeCaracteres > 0, "Asistente:MaxMensajeCaracteres debe ser mayor que cero.")
+    .Validate(o => o.MaxHistorial >= 0, "Asistente:MaxHistorial no puede ser negativo.")
+    .Validate(o => o.IntentTimeoutSeconds > 0, "Asistente:IntentTimeoutSeconds debe ser mayor que cero.")
+    .Validate(o => o.GenerationTimeoutSeconds > 0, "Asistente:GenerationTimeoutSeconds debe ser mayor que cero.")
+    .Validate(
+        o => o.RateLimit.PermitLimitPorUsuario > 0,
+        "Asistente:RateLimit:PermitLimitPorUsuario debe ser mayor que cero.")
+    .Validate(
+        o => o.RateLimit.PermitLimitPorViaje > 0,
+        "Asistente:RateLimit:PermitLimitPorViaje debe ser mayor que cero.")
+    .Validate(
+        o => o.RateLimit.WindowSeconds > 0,
+        "Asistente:RateLimit:WindowSeconds debe ser mayor que cero.")
+    .Validate(
+        o => o.RateLimit.QueueLimit >= 0,
+        "Asistente:RateLimit:QueueLimit no puede ser negativo.")
+    .ValidateOnStart();
+
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<ValidationFilter>();
@@ -74,6 +111,72 @@ builder.Services
 
 builder.Services.AddAuthorization();
 
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        var asistente = context.HttpContext.RequestServices
+            .GetRequiredService<IOptions<AsistenteOptions>>()
+            .Value;
+
+        var retryAfter = TimeSpan.FromSeconds(asistente.RateLimit.WindowSeconds);
+
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfterMetadata))
+        {
+            retryAfter = retryAfterMetadata;
+        }
+
+        await AsistenteRateLimitResponse.EscribirAsync(
+            context.HttpContext,
+            retryAfter,
+            cancellationToken);
+    };
+
+    options.AddPolicy(AsistenteRateLimitPolicies.Usuario, httpContext =>
+    {
+        var asistente = httpContext.RequestServices
+            .GetRequiredService<IOptions<AsistenteOptions>>()
+            .Value;
+
+        var clave = AsistenteRateLimitKeys.Usuario(
+            httpContext.User.FindFirst("sub")?.Value);
+
+        return RateLimitPartition.GetFixedWindowLimiter(clave, _ =>
+            new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = asistente.RateLimit.PermitLimitPorUsuario,
+                Window = TimeSpan.FromSeconds(asistente.RateLimit.WindowSeconds),
+                QueueLimit = asistente.RateLimit.QueueLimit,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+            });
+    });
+
+    options.AddPolicy(AsistenteRateLimitPolicies.Viaje, httpContext =>
+    {
+        var asistente = httpContext.RequestServices
+            .GetRequiredService<IOptions<AsistenteOptions>>()
+            .Value;
+
+        var usuarioId = httpContext.User.FindFirst("sub")?.Value;
+        var viajeId = httpContext.Request.RouteValues.TryGetValue("id", out var value)
+            ? value?.ToString()
+            : null;
+
+        var clave = AsistenteRateLimitKeys.Viaje(usuarioId ?? "anonimo", viajeId);
+
+        return RateLimitPartition.GetFixedWindowLimiter(clave, _ =>
+            new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = asistente.RateLimit.PermitLimitPorViaje,
+                Window = TimeSpan.FromSeconds(asistente.RateLimit.WindowSeconds),
+                QueueLimit = asistente.RateLimit.QueueLimit,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+            });
+    });
+});
+
 var app = builder.Build();
 
 app.UseExceptionHandler();
@@ -86,6 +189,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.UseHttpsRedirection();
 app.MapControllers();

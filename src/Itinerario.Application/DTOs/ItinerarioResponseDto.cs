@@ -12,5 +12,6 @@ public class ItinerarioResponseDto
     public string? OrigenDescripcion { get; set; }
     public decimal? OrigenLatitud { get; set; }
     public decimal? OrigenLongitud { get; set; }
+    public string? Version { get; set; }
     public IReadOnlyCollection<ParadaItinerarioDto> Paradas { get; set; } = new List<ParadaItinerarioDto>();
 }

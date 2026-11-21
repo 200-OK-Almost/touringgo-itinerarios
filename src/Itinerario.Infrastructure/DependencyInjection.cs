@@ -5,6 +5,7 @@ using Itinerario.Application.Interfaces;
 using Itinerario.Infrastructure.Clients;
 using Itinerario.Infrastructure.Data;
 using Itinerario.Infrastructure.Repositories;
+using Itinerario.Infrastructure.Telemetry;
 
 namespace Itinerario.Infrastructure;
 
@@ -20,6 +21,7 @@ public static class DependencyInjection
 
         services.AddScoped<IViajeRepository, ViajeRepository>();
         services.AddScoped<IItinerarioRepository, ItinerarioRepository>();
+        services.AddScoped<IAsistenteTelemetry, AsistenteTelemetry>();
 
         services.AddHttpClient<ILugaresClient, LugaresClient>(client =>
         {
