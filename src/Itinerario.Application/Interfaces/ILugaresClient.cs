@@ -13,7 +13,6 @@ public interface ILugaresClient
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyCollection<LugarCandidatoDto>> BuscarSemanticoAsync(
-        string query,
-        int cantidad,
+        BusquedaSemanticaLugaresDto busqueda,
         CancellationToken cancellationToken = default);
 }

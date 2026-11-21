@@ -249,7 +249,17 @@ public class ItinerarioService : IItinerarioService
         try
         {
             var intencion = ConstruirIntencion(viaje, perfil, barrio, categoriaCodigos);
-            var semanticos = await _lugaresClient.BuscarSemanticoAsync(intencion, 20, cancellationToken);
+            var busqueda = new BusquedaSemanticaLugaresDto
+            {
+                Query = intencion,
+                Cantidad = 20,
+                Barrio = barrio,
+                CategoriaCodigos = categoriaCodigos.ToList()
+            };
+
+            var semanticos = await _lugaresClient.BuscarSemanticoAsync(
+                busqueda,
+                cancellationToken);
 
             var delBarrio = semanticos
                 .Where(l => l.Barrio == barrio)

@@ -104,11 +104,27 @@ public class LugaresClient : ILugaresClient
     }
 
     public async Task<IReadOnlyCollection<LugarCandidatoDto>> BuscarSemanticoAsync(
-        string query,
-        int cantidad,
+        BusquedaSemanticaLugaresDto busqueda,
         CancellationToken cancellationToken = default)
     {
-        var request = new BusquedaSemanticaRequest { Query = query, Cantidad = cantidad };
+        var request = new BusquedaSemanticaRequest
+        {
+            Query = busqueda.Query,
+            Cantidad = busqueda.Cantidad,
+            Barrio = busqueda.Barrio?.ToString(),
+            CategoriaCodigos = busqueda.CategoriaCodigos,
+            NivelPrecioMaximo = busqueda.NivelPrecioMaximo,
+            SoloAlAireLibre = busqueda.SoloAlAireLibre,
+            SoloBajoTecho = busqueda.SoloBajoTecho,
+            AptoNinos = busqueda.AptoNinos,
+            AccesibleMovilidadReducida = busqueda.AccesibleMovilidadReducida,
+            RestriccionDietaria = busqueda.RestriccionDietaria,
+            ExcluirIds = busqueda.ExcluirIds,
+            LatitudReferencia = busqueda.LatitudReferencia,
+            LongitudReferencia = busqueda.LongitudReferencia,
+            RadioMetrosMaximo = busqueda.RadioMetrosMaximo,
+            SimilitudMinima = busqueda.SimilitudMinima
+        };
 
         try
         {
@@ -132,6 +148,19 @@ public class LugaresClient : ILugaresClient
     {
         public string Query { get; set; } = string.Empty;
         public int Cantidad { get; set; }
+        public string? Barrio { get; set; }
+        public IReadOnlyCollection<string>? CategoriaCodigos { get; set; }
+        public short? NivelPrecioMaximo { get; set; }
+        public bool? SoloAlAireLibre { get; set; }
+        public bool? SoloBajoTecho { get; set; }
+        public bool? AptoNinos { get; set; }
+        public bool? AccesibleMovilidadReducida { get; set; }
+        public string? RestriccionDietaria { get; set; }
+        public IReadOnlyCollection<Guid>? ExcluirIds { get; set; }
+        public decimal? LatitudReferencia { get; set; }
+        public decimal? LongitudReferencia { get; set; }
+        public double? RadioMetrosMaximo { get; set; }
+        public double? SimilitudMinima { get; set; }
     }
 
     private static LugarCandidatoDto Mapear(LugarListadoItemDto lugar) => new()
@@ -139,10 +168,19 @@ public class LugaresClient : ILugaresClient
         Id = lugar.Id,
         Nombre = lugar.Nombre,
         Barrio = ParseBarrio(lugar.Barrio),
+        Subzona = lugar.Subzona,
+        Direccion = lugar.Direccion,
         Latitud = lugar.Latitud,
         Longitud = lugar.Longitud,
         NivelPrecio = MapearNivelPrecio(lugar.NivelPrecio),
+        Puntuacion = lugar.Puntuacion,
+        CantidadResenas = lugar.CantidadResenas,
         EsAireLibre = lugar.EsAlAireLibre,
+        EsBajoTecho = lugar.EsBajoTecho,
+        AptoNinos = lugar.AptoNinos,
+        AccesibleMovilidadReducida = lugar.AccesibleMovilidadReducida,
+        OfreceMenuInfantil = lugar.OfreceMenuInfantil,
+        FotoPortadaUrl = lugar.FotoPortadaUrl,
         DuracionSugeridaMinutos = lugar.DuracionEstimadaMinutos,
         Categorias = lugar.Categorias
     };
@@ -151,15 +189,29 @@ public class LugaresClient : ILugaresClient
     {
         Id = lugar.Id,
         Nombre = lugar.Nombre,
+        Descripcion = lugar.Descripcion,
         Barrio = ParseBarrio(lugar.Barrio),
+        Subzona = lugar.Subzona,
+        Direccion = lugar.Direccion,
         Latitud = lugar.Latitud,
         Longitud = lugar.Longitud,
         NivelPrecio = MapearNivelPrecio(lugar.NivelPrecio),
+        Puntuacion = lugar.Puntuacion,
+        CantidadResenas = lugar.CantidadResenas,
         EsAireLibre = lugar.EsAlAireLibre,
+        EsBajoTecho = lugar.EsBajoTecho,
+        AptoNinos = lugar.AptoNinos,
+        AccesibleMovilidadReducida = lugar.AccesibleMovilidadReducida,
+        OfreceMenuInfantil = lugar.OfreceMenuInfantil,
+        FotoPortadaUrl = lugar.Fotos
+            .FirstOrDefault(f => f.EsPortada)?.Url
+            ?? lugar.Fotos.OrderBy(f => f.Orden).FirstOrDefault()?.Url,
         DuracionSugeridaMinutos = lugar.DuracionEstimadaMinutos,
         Categorias = lugar.Categorias
             .Select(categoria => categoria.Codigo)
-            .ToList()
+            .ToList(),
+        OpcionesDietarias = lugar.OpcionesDietarias,
+        Similitud = lugar.Similitud
     };
 
     private static BarrioCaba ParseBarrio(string? barrio)

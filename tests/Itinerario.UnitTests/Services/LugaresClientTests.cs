@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
+using Itinerario.Application.DTOs;
 using Itinerario.Domain.Enums;
 using Itinerario.Domain.Exceptions;
 using Itinerario.Infrastructure.Clients;
@@ -110,25 +111,108 @@ public class LugaresClientTests
     }
 
     [Fact]
-    public async Task BuscarSemanticoAsync_MapeaRespuesta()
+    public async Task BuscarSemanticoAsync_MapeaRespuestaEnriquecida()
     {
         var handler = new FakeHandler(_ => JsonResponse(
             """
             [
-              { "id": "11111111-1111-1111-1111-111111111101", "nombre": "Plaza Serrano", "barrio": "Palermo", "latitud": -34.5883, "longitud": -58.4306, "duracionEstimadaMinutos": 45, "nivelPrecio": 2, "esAlAireLibre": true, "categorias": [{ "id": 3, "codigo": "parques_aire_libre", "nombre": "Parques y aire libre" }] }
+              {
+                "id": "11111111-1111-1111-1111-111111111101",
+                "nombre": "Plaza Serrano",
+                "barrio": "Palermo",
+                "subzona": "Soho",
+                "direccion": "Thames 1800",
+                "latitud": -34.5883,
+                "longitud": -58.4306,
+                "descripcion": "Plaza con ferias y bares",
+                "duracionEstimadaMinutos": 45,
+                "nivelPrecio": 2,
+                "puntuacion": 4.7,
+                "cantidadResenas": 1234,
+                "esAlAireLibre": true,
+                "esBajoTecho": false,
+                "aptoNinos": true,
+                "accesibleMovilidadReducida": true,
+                "ofreceMenuInfantil": false,
+                "opcionesDietarias": ["vegano", "celiaco"],
+                "fotos": [
+                  { "id": "22222222-2222-2222-2222-222222222201", "url": "http://foto", "orden": 1, "esPortada": true }
+                ],
+                "categorias": [{ "id": 3, "codigo": "parques_aire_libre", "nombre": "Parques y aire libre" }],
+                "similitud": 0.87
+              }
             ]
             """));
 
         var client = new LugaresClient(new HttpClient(handler) { BaseAddress = new Uri("http://test") });
 
-        var resultado = await client.BuscarSemanticoAsync("cafe tranquilo", 10);
+        var resultado = await client.BuscarSemanticoAsync(
+            new BusquedaSemanticaLugaresDto { Query = "cafe tranquilo", Cantidad = 10 });
 
         var unico = Assert.Single(resultado);
         Assert.Equal("Plaza Serrano", unico.Nombre);
+        Assert.Equal("Plaza con ferias y bares", unico.Descripcion);
+        Assert.Equal("Thames 1800", unico.Direccion);
+        Assert.Equal("Soho", unico.Subzona);
         Assert.Equal(BarrioCaba.Palermo, unico.Barrio);
         Assert.Equal(NivelPresupuesto.Equilibrado, unico.NivelPrecio);
+        Assert.Equal(4.7m, unico.Puntuacion);
+        Assert.Equal(1234, unico.CantidadResenas);
         Assert.True(unico.EsAireLibre);
+        Assert.False(unico.EsBajoTecho);
+        Assert.True(unico.AptoNinos);
+        Assert.True(unico.AccesibleMovilidadReducida);
+        Assert.False(unico.OfreceMenuInfantil);
+        Assert.Equal("http://foto", unico.FotoPortadaUrl);
+        Assert.Equal(new[] { "vegano", "celiaco" }, unico.OpcionesDietarias);
+        Assert.Equal(0.87, unico.Similitud);
         Assert.Equal(new[] { "parques_aire_libre" }, unico.Categorias);
+    }
+
+    [Fact]
+    public async Task BuscarSemanticoAsync_EnviaFiltrosDuros()
+    {
+        string? body = null;
+        var handler = new FakeHandler(async (req, cancellationToken) =>
+        {
+            body = await req.Content!.ReadAsStringAsync(cancellationToken);
+            return JsonResponse("[]");
+        });
+
+        var client = new LugaresClient(new HttpClient(handler) { BaseAddress = new Uri("http://test") });
+        var excluido = Guid.NewGuid();
+
+        await client.BuscarSemanticoAsync(new BusquedaSemanticaLugaresDto
+        {
+            Query = "lugar al aire libre",
+            Cantidad = 8,
+            Barrio = BarrioCaba.Palermo,
+            CategoriaCodigos = new[] { "cafe_especialidad" },
+            NivelPrecioMaximo = 2,
+            SoloAlAireLibre = true,
+            SoloBajoTecho = false,
+            AptoNinos = true,
+            AccesibleMovilidadReducida = true,
+            RestriccionDietaria = "Celiaco",
+            ExcluirIds = new[] { excluido },
+            LatitudReferencia = -34.6037m,
+            LongitudReferencia = -58.3816m,
+            RadioMetrosMaximo = 800,
+            SimilitudMinima = 0.6
+        });
+
+        Assert.NotNull(body);
+        Assert.Contains("\"barrio\":\"Palermo\"", body);
+        Assert.Contains("\"categoriaCodigos\":[\"cafe_especialidad\"]", body);
+        Assert.Contains("\"nivelPrecioMaximo\":2", body);
+        Assert.Contains("\"soloAlAireLibre\":true", body);
+        Assert.Contains("\"soloBajoTecho\":false", body);
+        Assert.Contains("\"aptoNinos\":true", body);
+        Assert.Contains("\"accesibleMovilidadReducida\":true", body);
+        Assert.Contains("\"restriccionDietaria\":\"Celiaco\"", body);
+        Assert.Contains(excluido.ToString(), body);
+        Assert.Contains("\"radioMetrosMaximo\":800", body);
+        Assert.Contains("\"similitudMinima\":0.6", body);
     }
 
     [Fact]
@@ -171,9 +255,14 @@ public class LugaresClientTests
 
     private sealed class FakeHandler : HttpMessageHandler
     {
-        private readonly Func<HttpRequestMessage, HttpResponseMessage> _handler;
+        private readonly Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> _handler;
 
         public FakeHandler(Func<HttpRequestMessage, HttpResponseMessage> handler)
+            : this((request, _) => Task.FromResult(handler(request)))
+        {
+        }
+
+        public FakeHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler)
         {
             _handler = handler;
         }
@@ -181,6 +270,6 @@ public class LugaresClientTests
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
-            => Task.FromResult(_handler(request));
+            => _handler(request, cancellationToken);
     }
 }
