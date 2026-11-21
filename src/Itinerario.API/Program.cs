@@ -3,6 +3,7 @@ using Itinerario.API.Extensions;
 using Itinerario.API.Filters;
 using Itinerario.API.Services;
 using Itinerario.Application;
+using Itinerario.Application.Configuration;
 using Itinerario.Application.Interfaces;
 using Itinerario.Infrastructure;
 using Itinerario.Infrastructure.Data;
@@ -20,6 +21,38 @@ builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddApplication();
+
+builder.Services
+    .AddOptions<AsistenteOptions>()
+    .Bind(builder.Configuration.GetSection(AsistenteOptions.SectionName))
+    .Validate(o => o.TopK > 0, "Asistente:TopK debe ser mayor que cero.")
+    .Validate(o => o.MinResultados > 0, "Asistente:MinResultados debe ser mayor que cero.")
+    .Validate(
+        o => o.MinResultados <= o.TopK,
+        "Asistente:MinResultados no puede superar a Asistente:TopK.")
+    .Validate(
+        o => !o.SimilitudMinima.HasValue
+            || (o.SimilitudMinima.Value >= 0 && o.SimilitudMinima.Value <= 1),
+        "Asistente:SimilitudMinima debe estar entre 0 y 1.")
+    .Validate(o => o.RadioMetrosDefault > 0, "Asistente:RadioMetrosDefault debe ser mayor que cero.")
+    .Validate(o => o.MaxMensajeCaracteres > 0, "Asistente:MaxMensajeCaracteres debe ser mayor que cero.")
+    .Validate(o => o.MaxHistorial >= 0, "Asistente:MaxHistorial no puede ser negativo.")
+    .Validate(o => o.IntentTimeoutSeconds > 0, "Asistente:IntentTimeoutSeconds debe ser mayor que cero.")
+    .Validate(o => o.GenerationTimeoutSeconds > 0, "Asistente:GenerationTimeoutSeconds debe ser mayor que cero.")
+    .Validate(
+        o => o.RateLimit.PermitLimitPorUsuario > 0,
+        "Asistente:RateLimit:PermitLimitPorUsuario debe ser mayor que cero.")
+    .Validate(
+        o => o.RateLimit.PermitLimitPorViaje > 0,
+        "Asistente:RateLimit:PermitLimitPorViaje debe ser mayor que cero.")
+    .Validate(
+        o => o.RateLimit.WindowSeconds > 0,
+        "Asistente:RateLimit:WindowSeconds debe ser mayor que cero.")
+    .Validate(
+        o => o.RateLimit.QueueLimit >= 0,
+        "Asistente:RateLimit:QueueLimit no puede ser negativo.")
+    .ValidateOnStart();
+
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<ValidationFilter>();
