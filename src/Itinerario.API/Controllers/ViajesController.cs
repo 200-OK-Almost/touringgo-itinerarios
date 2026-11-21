@@ -1,8 +1,10 @@
+using Itinerario.API.RateLimiting;
 using Itinerario.Application.Configuration;
 using Itinerario.Application.DTOs;
 using Itinerario.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 
 namespace Itinerario.API.Controllers;
@@ -60,6 +62,7 @@ public class ViajesController : ControllerBase
         => Ok(await _service.ObtenerTodosAsync(_currentUser.UsuarioId, pagina, tamano, cancellationToken));
 
     [HttpGet("asistente/capacidades")]
+    [EnableRateLimiting(AsistenteRateLimitPolicies.Usuario)]
     [ProducesResponseType(typeof(AsistenteCapacidadesDto), StatusCodes.Status200OK)]
     public ActionResult<AsistenteCapacidadesDto> ObtenerCapacidadesAsistente()
         => Ok(AsistenteCapacidadesDto.Desde(_asistenteOptions.Value));

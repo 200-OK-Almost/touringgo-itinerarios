@@ -1,6 +1,8 @@
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using Itinerario.API.Extensions;
 using Itinerario.API.Filters;
+using Itinerario.API.RateLimiting;
 using Itinerario.API.Services;
 using Itinerario.Application;
 using Itinerario.Application.Configuration;
@@ -8,7 +10,9 @@ using Itinerario.Application.Interfaces;
 using Itinerario.Infrastructure;
 using Itinerario.Infrastructure.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -107,6 +111,72 @@ builder.Services
 
 builder.Services.AddAuthorization();
 
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        var asistente = context.HttpContext.RequestServices
+            .GetRequiredService<IOptions<AsistenteOptions>>()
+            .Value;
+
+        var retryAfter = TimeSpan.FromSeconds(asistente.RateLimit.WindowSeconds);
+
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfterMetadata))
+        {
+            retryAfter = retryAfterMetadata;
+        }
+
+        await AsistenteRateLimitResponse.EscribirAsync(
+            context.HttpContext,
+            retryAfter,
+            cancellationToken);
+    };
+
+    options.AddPolicy(AsistenteRateLimitPolicies.Usuario, httpContext =>
+    {
+        var asistente = httpContext.RequestServices
+            .GetRequiredService<IOptions<AsistenteOptions>>()
+            .Value;
+
+        var clave = AsistenteRateLimitKeys.Usuario(
+            httpContext.User.FindFirst("sub")?.Value);
+
+        return RateLimitPartition.GetFixedWindowLimiter(clave, _ =>
+            new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = asistente.RateLimit.PermitLimitPorUsuario,
+                Window = TimeSpan.FromSeconds(asistente.RateLimit.WindowSeconds),
+                QueueLimit = asistente.RateLimit.QueueLimit,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+            });
+    });
+
+    options.AddPolicy(AsistenteRateLimitPolicies.Viaje, httpContext =>
+    {
+        var asistente = httpContext.RequestServices
+            .GetRequiredService<IOptions<AsistenteOptions>>()
+            .Value;
+
+        var usuarioId = httpContext.User.FindFirst("sub")?.Value;
+        var viajeId = httpContext.Request.RouteValues.TryGetValue("id", out var value)
+            ? value?.ToString()
+            : null;
+
+        var clave = AsistenteRateLimitKeys.Viaje(usuarioId ?? "anonimo", viajeId);
+
+        return RateLimitPartition.GetFixedWindowLimiter(clave, _ =>
+            new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = asistente.RateLimit.PermitLimitPorViaje,
+                Window = TimeSpan.FromSeconds(asistente.RateLimit.WindowSeconds),
+                QueueLimit = asistente.RateLimit.QueueLimit,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+            });
+    });
+});
+
 var app = builder.Build();
 
 app.UseExceptionHandler();
@@ -119,6 +189,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.UseHttpsRedirection();
 app.MapControllers();
