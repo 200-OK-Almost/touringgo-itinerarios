@@ -205,6 +205,405 @@ public class AsistenteServiceTests
             admin));
     }
 
+    [Fact]
+    public async Task ResponderAsync_ReemplazoAmbiguo_DevuelveAclaracionSinBuscar()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var itinerario = TestData.CrearItinerario(viaje);
+
+        var cafeUno = TestData.CrearLugar("Café Uno");
+        var cafeDos = TestData.CrearLugar("Café Dos");
+        TestData.CrearParada(itinerario, cafeUno.Id, Turno.Manana, 1);
+        TestData.CrearParada(itinerario, cafeDos.Id, Turno.Tarde, 2);
+
+        var lugares = new LugaresClientFalso();
+        lugares.PorId[cafeUno.Id] = cafeUno;
+        lugares.PorId[cafeDos.Id] = cafeDos;
+
+        var telemetria = new TelemetriaFalsa();
+        var service = CrearServicio(viaje, lugares, telemetria);
+
+        var respuesta = await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Reemplazá el café por un bar",
+                NumeroDia = 1
+            },
+            admin);
+
+        Assert.True(respuesta.PuedeAplicar);
+        Assert.NotNull(respuesta.Aclaracion);
+        Assert.Equal(2, respuesta.Aclaracion!.Opciones.Count);
+        Assert.Empty(respuesta.Recomendaciones);
+        Assert.Null(respuesta.Accion);
+        Assert.Null(respuesta.Advertencia);
+        Assert.Empty(lugares.Busquedas);
+        Assert.Contains("aclaracion", telemetria.Resultados);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_Reemplazo_UsaIntencionYProponeAccion()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var itinerario = TestData.CrearItinerario(viaje, version: "v7");
+        var museo = TestData.CrearLugar("Museo de Arte", "museos_galerias");
+        var parada = TestData.CrearParada(itinerario, museo.Id);
+        var nuevo = TestData.CrearLugar("Parque", "parques_aire_libre");
+
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = new[] { nuevo }
+        };
+        lugares.PorId[museo.Id] = museo;
+
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        var respuesta = await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Reemplazá el museo por algo al aire libre",
+                NumeroDia = 1
+            },
+            admin);
+
+        var busqueda = Assert.Single(lugares.Busquedas);
+        Assert.Equal("aire libre", busqueda.Query);
+        Assert.True(busqueda.SoloAlAireLibre);
+        Assert.Contains(museo.Id, busqueda.ExcluirIds!);
+
+        Assert.NotNull(respuesta.Accion);
+        Assert.Equal("ReemplazarParada", respuesta.Accion!.Tipo);
+        Assert.Equal(nuevo.Id, respuesta.Accion.LugarId);
+        Assert.Equal(parada.Id, respuesta.Accion.ParadaId);
+        Assert.Equal("v7", respuesta.Accion.Version);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_Agregar_ProponeAccionConTurno()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var itinerario = TestData.CrearItinerario(viaje, version: "v3");
+        var bar = TestData.CrearLugar("Bar", "bares_vermu");
+
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = new[] { bar }
+        };
+
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        var respuesta = await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Agregá un bar para la tarde",
+                NumeroDia = 1
+            },
+            admin);
+
+        var busqueda = Assert.Single(lugares.Busquedas);
+        Assert.Equal("bar", busqueda.Query);
+        Assert.Contains("bares_vermu", busqueda.CategoriaCodigos!);
+
+        Assert.NotNull(respuesta.Accion);
+        Assert.Equal("AgregarParada", respuesta.Accion!.Tipo);
+        Assert.Null(respuesta.Accion.ParadaId);
+        Assert.Equal("Tarde", respuesta.Accion.Turno);
+        Assert.Equal("v3", respuesta.Accion.Version);
+        Assert.Equal(itinerario.NumeroDia, respuesta.Accion.NumeroDia);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_MiembroNoRecibeAccion()
+    {
+        var admin = Guid.NewGuid();
+        var miembro = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin, (miembro, RolMiembro.Miembro));
+        TestData.CrearItinerario(viaje, version: "v1");
+        var bar = TestData.CrearLugar("Bar", "bares_vermu");
+
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = new[] { bar }
+        };
+
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        var respuesta = await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Agregá un bar",
+                NumeroDia = 1
+            },
+            miembro);
+
+        Assert.False(respuesta.PuedeAplicar);
+        Assert.Null(respuesta.Accion);
+        Assert.Single(respuesta.Recomendaciones);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_CategoriasDeIntencionReemplazanLasDelViaje()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        viaje.Etiquetas.Add(new EtiquetaViaje { CategoriaCodigo = "cafe_especialidad" });
+        var museo = TestData.CrearLugar("Museo", "museos_galerias");
+
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = new[] { museo }
+        };
+
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Recomendame un museo",
+                NumeroDia = 1
+            },
+            admin);
+
+        var busqueda = Assert.Single(lugares.Busquedas);
+        Assert.Contains("museos_galerias", busqueda.CategoriaCodigos!);
+        Assert.DoesNotContain("cafe_especialidad", busqueda.CategoriaCodigos!);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_Cerca_UsaLaParadaObjetivoComoReferencia()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var itinerario = TestData.CrearItinerario(viaje);
+        var museo = TestData.CrearLugar(
+            "Museo",
+            "museos_galerias",
+            latitud: -34.60m,
+            longitud: -58.38m);
+        TestData.CrearParada(itinerario, museo.Id);
+        var bar = TestData.CrearLugar("Bar", "bares_vermu");
+
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = new[] { bar }
+        };
+        lugares.PorId[museo.Id] = museo;
+
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Reemplazá el museo por un bar cerca",
+                NumeroDia = 1
+            },
+            admin);
+
+        var busqueda = Assert.Single(lugares.Busquedas);
+        Assert.Equal(-34.60m, busqueda.LatitudReferencia);
+        Assert.Equal(-58.38m, busqueda.LongitudReferencia);
+        Assert.Equal(800, busqueda.RadioMetrosMaximo);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_FallbackFiltraRestriccionDietaria()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var vegano = TestData.CrearLugar(
+            "Café Vegano",
+            opcionesDietarias: new[] { "vegano" });
+        var carne = TestData.CrearLugar("Café Carnívoro");
+
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = Array.Empty<LugarCandidatoDto>(),
+            ResultadoCatalogo = new[] { vegano, carne }
+        };
+
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        var respuesta = await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Agregá un café vegano",
+                NumeroDia = 1
+            },
+            admin);
+
+        Assert.Single(respuesta.Recomendaciones);
+        Assert.Equal(vegano.Id, respuesta.Recomendaciones.Single().LugarId);
+        Assert.NotNull(respuesta.Advertencia);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_ReemplazoTargetInexistente_DevuelveAclaracionSinBuscar()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var itinerario = TestData.CrearItinerario(viaje);
+        var cafe = TestData.CrearLugar("Café");
+        TestData.CrearParada(itinerario, cafe.Id);
+
+        var lugares = new LugaresClientFalso();
+        lugares.PorId[cafe.Id] = cafe;
+
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        var respuesta = await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Reemplazá la librería por un bar",
+                NumeroDia = 1
+            },
+            admin);
+
+        Assert.True(respuesta.PuedeAplicar);
+        Assert.NotNull(respuesta.Aclaracion);
+        Assert.Single(respuesta.Aclaracion!.Opciones);
+        Assert.Empty(respuesta.Recomendaciones);
+        Assert.Empty(lugares.Busquedas);
+        Assert.Null(respuesta.Accion);
+        Assert.Null(respuesta.Advertencia);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_PresupuestoDeIntencionSeLimitaAlDelViaje()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        viaje.NivelPresupuesto = NivelPresupuesto.Economico;
+        var bar = TestData.CrearLugar("Bar", "bares_vermu");
+
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = new[] { bar }
+        };
+
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Agregá un bar moderado",
+                NumeroDia = 1
+            },
+            admin);
+
+        var busqueda = Assert.Single(lugares.Busquedas);
+        Assert.Equal((short?)1, busqueda.NivelPrecioMaximo);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_FamiliaAgregaFiltrosDeNinosYAccesibilidad()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        viaje.TipoViaje = TipoViaje.Familia;
+        viaje.ParametrosFamilia = new ParametrosFamilia
+        {
+            HayNinos = true,
+            MovilidadReducida = true
+        };
+        var bar = TestData.CrearLugar("Bar", "bares_vermu");
+
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = new[] { bar }
+        };
+
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Agregá un bar",
+                NumeroDia = 1
+            },
+            admin);
+
+        var busqueda = Assert.Single(lugares.Busquedas);
+        Assert.True(busqueda.AptoNinos);
+        Assert.True(busqueda.AccesibleMovilidadReducida);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_SinVersion_NoProponeAccion()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        TestData.CrearItinerario(viaje, version: string.Empty);
+        var bar = TestData.CrearLugar("Bar", "bares_vermu");
+
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = new[] { bar }
+        };
+
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        var respuesta = await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Agregá un bar",
+                NumeroDia = 1
+            },
+            admin);
+
+        Assert.True(respuesta.PuedeAplicar);
+        Assert.Null(respuesta.Accion);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_FallbackFiltraBajoTecho()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var abierto = TestData.CrearLugar(
+            "Abierto",
+            esAireLibre: true,
+            esBajoTecho: false);
+        var cubierto = TestData.CrearLugar(
+            "Cubierto",
+            esAireLibre: false,
+            esBajoTecho: true);
+
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = Array.Empty<LugarCandidatoDto>(),
+            ResultadoCatalogo = new[] { abierto, cubierto }
+        };
+
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        var respuesta = await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Agregá un lugar bajo techo",
+                NumeroDia = 1
+            },
+            admin);
+
+        Assert.Single(respuesta.Recomendaciones);
+        Assert.Equal(cubierto.Id, respuesta.Recomendaciones.Single().LugarId);
+        Assert.NotNull(respuesta.Advertencia);
+    }
+
     private static AsistenteService CrearServicio(
         Viaje viaje,
         LugaresClientFalso lugares,
@@ -212,6 +611,7 @@ public class AsistenteServiceTests
         => new(
             new ViajeRepositoryFalso { Viaje = viaje },
             lugares,
+            new IntencionService(),
             telemetria,
             Options.Create(new AsistenteOptions
             {

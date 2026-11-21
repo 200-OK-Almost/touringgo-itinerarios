@@ -6,6 +6,7 @@ using Itinerario.Domain.Entities;
 using Itinerario.Domain.Enums;
 using Itinerario.Domain.Exceptions;
 using Microsoft.Extensions.Options;
+using ItinerarioEntity = Itinerario.Domain.Entities.Itinerario;
 
 namespace Itinerario.Application.Services;
 
@@ -13,17 +14,20 @@ public class AsistenteService : IAsistenteService
 {
     private readonly IViajeRepository _viajeRepository;
     private readonly ILugaresClient _lugaresClient;
+    private readonly IIntencionService _intencionService;
     private readonly IAsistenteTelemetry _telemetry;
     private readonly AsistenteOptions _options;
 
     public AsistenteService(
         IViajeRepository viajeRepository,
         ILugaresClient lugaresClient,
+        IIntencionService intencionService,
         IAsistenteTelemetry telemetry,
         IOptions<AsistenteOptions> options)
     {
         _viajeRepository = viajeRepository;
         _lugaresClient = lugaresClient;
+        _intencionService = intencionService;
         _telemetry = telemetry;
         _options = options.Value;
     }
@@ -57,30 +61,81 @@ public class AsistenteService : IAsistenteService
             throw new NotFoundException($"No se encontró el viaje con id {viajeId}.");
         }
 
-        var (barrio, categorias) = ObtenerContextoDia(viaje, request.NumeroDia);
-        var paradasActuales = await ObtenerParadasActualesAsync(
+        var (barrio, categoriasViaje, itinerario) = ObtenerContextoDia(
             viaje,
-            request.NumeroDia,
+            request.NumeroDia);
+
+        var paradasActuales = await ObtenerParadasActualesAsync(
+            itinerario,
             cancellationToken);
 
+        var paradasResolubles = paradasActuales
+            .Select(parada => new ParadaResolubleDto
+            {
+                ParadaId = parada.Parada.Id,
+                LugarId = parada.Lugar.Id,
+                Nombre = parada.Lugar.Nombre,
+                Turno = parada.Parada.Turno,
+                OrdenParada = parada.Parada.OrdenParada,
+                Categorias = parada.Lugar.Categorias
+            })
+            .ToList();
+
+        var intencion = _intencionService.Interpretar(
+            mensaje,
+            paradasResolubles,
+            _options.RadioMetrosDefault);
+
+        var puedeAplicar = viaje.EsAdministrador(usuarioIdSolicitante);
+
+        if (intencion.Aclaracion is not null)
+        {
+            var aclaracion = new AsistenteResponseDto
+            {
+                Mensaje = intencion.Aclaracion.Pregunta,
+                PuedeAplicar = puedeAplicar,
+                Aclaracion = intencion.Aclaracion
+            };
+
+            _telemetry.RegistrarResultado("aclaracion", 0, viajeId);
+            _telemetry.RegistrarEtapa("total", total.Elapsed, viajeId);
+
+            return aclaracion;
+        }
+
+        var categoriasBusqueda = intencion.Filtros.CategoriaCodigos.Count > 0
+            ? intencion.Filtros.CategoriaCodigos
+            : categoriasViaje;
+
+        var presupuestoViaje = MapearNivelPrecioMaximo(viaje.NivelPresupuesto);
+        var presupuestoMaximo = intencion.Filtros.NivelPrecioMaximo.HasValue
+            ? Math.Min(intencion.Filtros.NivelPrecioMaximo.Value, presupuestoViaje)
+            : presupuestoViaje;
+
         var idsExcluidos = ObtenerIdsExcluidos(viaje);
-        var referencia = ObtenerReferenciaCercania(mensaje, paradasActuales);
+        var referencia = ObtenerReferenciaCercania(intencion, paradasActuales);
 
         var busqueda = new BusquedaSemanticaLugaresDto
         {
-            Query = mensaje,
+            Query = intencion.QuerySemantica,
             Cantidad = _options.TopK,
             Barrio = barrio,
-            CategoriaCodigos = categorias.Count > 0 ? categorias : null,
-            NivelPrecioMaximo = MapearNivelPrecioMaximo(viaje.NivelPresupuesto),
-            SoloAlAireLibre = MencionaAireLibre(mensaje) ? true : null,
-            SoloBajoTecho = MencionaBajoTecho(mensaje) ? true : null,
-            AptoNinos = RequiereAptoNinos(viaje) ? true : null,
-            AccesibleMovilidadReducida = RequiereAccesibilidad(viaje) ? true : null,
+            CategoriaCodigos = categoriasBusqueda.Count > 0 ? categoriasBusqueda : null,
+            NivelPrecioMaximo = presupuestoMaximo,
+            SoloAlAireLibre = intencion.Filtros.SoloAlAireLibre,
+            SoloBajoTecho = intencion.Filtros.SoloBajoTecho,
+            AptoNinos = intencion.Filtros.AptoNinos == true || RequiereAptoNinos(viaje)
+                ? true
+                : null,
+            AccesibleMovilidadReducida =
+                intencion.Filtros.AccesibleMovilidadReducida == true || RequiereAccesibilidad(viaje)
+                    ? true
+                    : null,
+            RestriccionDietaria = intencion.Filtros.RestriccionDietaria,
             ExcluirIds = idsExcluidos.ToList(),
             LatitudReferencia = referencia?.Latitud,
             LongitudReferencia = referencia?.Longitud,
-            RadioMetrosMaximo = referencia is null ? null : _options.RadioMetrosDefault,
+            RadioMetrosMaximo = referencia is null ? null : intencion.RadioMetros,
             SimilitudMinima = _options.SimilitudMinima
         };
 
@@ -105,7 +160,7 @@ public class AsistenteService : IAsistenteService
         {
             var catalogo = await _lugaresClient.BuscarAsync(
                 barrio,
-                categorias,
+                categoriasBusqueda,
                 cancellationToken);
 
             var filtrados = FiltrarFallback(catalogo, busqueda, idsExcluidos)
@@ -123,13 +178,17 @@ public class AsistenteService : IAsistenteService
             .Select(MapearRecomendacion)
             .ToList();
 
+        var accion = ConstruirAccion(intencion, recomendaciones, itinerario, puedeAplicar);
+
         var resultado = new AsistenteResponseDto
         {
-            Mensaje = recomendaciones.Count == 0
-                ? "No encontré lugares que encajen con esos filtros. Probá con otra categoría o ampliá el presupuesto."
-                : $"Encontré {recomendaciones.Count} lugares que pueden encajar en tu recorrido.",
-            PuedeAplicar = viaje.EsAdministrador(usuarioIdSolicitante),
+            Mensaje = ConstruirMensaje(
+                intencion,
+                recomendaciones.Count,
+                itinerario?.NumeroDia ?? request.NumeroDia),
+            PuedeAplicar = puedeAplicar,
             Recomendaciones = recomendaciones,
+            Accion = accion,
             Advertencia = usoFallback
                 ? falloSemantico
                     ? "No se pudo usar la búsqueda semántica; se usó el catálogo filtrado."
@@ -146,9 +205,12 @@ public class AsistenteService : IAsistenteService
         return resultado;
     }
 
-    private static (BarrioCaba Barrio, IReadOnlyCollection<string> Categorias) ObtenerContextoDia(
-        Viaje viaje,
-        short? numeroDia)
+    private static (
+        BarrioCaba Barrio,
+        IReadOnlyCollection<string> Categorias,
+        ItinerarioEntity? Itinerario) ObtenerContextoDia(
+            Viaje viaje,
+            short? numeroDia)
     {
         if (viaje.Dias.Count == 0)
         {
@@ -160,7 +222,8 @@ public class AsistenteService : IAsistenteService
 
             return (
                 viaje.Barrio,
-                viaje.Etiquetas.Select(e => e.CategoriaCodigo).ToList());
+                viaje.Etiquetas.Select(e => e.CategoriaCodigo).ToList(),
+                viaje.Itinerarios.FirstOrDefault(i => i.NumeroDia == 1));
         }
 
         var dia = numeroDia.HasValue
@@ -177,39 +240,42 @@ public class AsistenteService : IAsistenteService
             ? dia.Etiquetas.Select(e => e.CategoriaCodigo).ToList()
             : viaje.Etiquetas.Select(e => e.CategoriaCodigo).ToList();
 
-        return (dia.Barrio, categorias);
+        var itinerario = viaje.Itinerarios
+            .FirstOrDefault(i => i.NumeroDia == dia.NumeroDia);
+
+        return (dia.Barrio, categorias, itinerario);
     }
 
-    private async Task<IReadOnlyList<LugarCandidatoDto>> ObtenerParadasActualesAsync(
-        Viaje viaje,
-        short? numeroDia,
+    private async Task<IReadOnlyList<ParadaActual>> ObtenerParadasActualesAsync(
+        ItinerarioEntity? itinerario,
         CancellationToken cancellationToken)
     {
-        var itinerario = numeroDia.HasValue
-            ? viaje.Itinerarios.FirstOrDefault(i => i.NumeroDia == numeroDia.Value)
-            : viaje.Itinerarios.OrderBy(i => i.NumeroDia).FirstOrDefault();
-
         if (itinerario is null)
         {
-            return Array.Empty<LugarCandidatoDto>();
+            return Array.Empty<ParadaActual>();
         }
 
         try
         {
-            var lugares = await Task.WhenAll(
-                itinerario.Paradas
-                    .OrderBy(p => p.Turno)
-                    .ThenBy(p => p.OrdenParada)
-                    .Select(p => _lugaresClient.ObtenerPorIdAsync(p.LugarId, cancellationToken)));
+            var paradas = itinerario.Paradas
+                .OrderBy(p => p.Turno)
+                .ThenBy(p => p.OrdenParada)
+                .ToList();
 
-            return lugares
-                .Where(l => l is not null)
-                .Cast<LugarCandidatoDto>()
+            var lugares = await Task.WhenAll(
+                paradas.Select(p => _lugaresClient.ObtenerPorIdAsync(p.LugarId, cancellationToken)));
+
+            return paradas
+                .Zip(lugares, (parada, lugar) => lugar is null
+                    ? null
+                    : new ParadaActual(parada, lugar))
+                .Where(parada => parada is not null)
+                .Cast<ParadaActual>()
                 .ToList();
         }
         catch (ServicioExternoNoDisponibleException)
         {
-            return Array.Empty<LugarCandidatoDto>();
+            return Array.Empty<ParadaActual>();
         }
     }
 
@@ -229,25 +295,85 @@ public class AsistenteService : IAsistenteService
     }
 
     private static LugarCandidatoDto? ObtenerReferenciaCercania(
-        string mensaje,
-        IReadOnlyList<LugarCandidatoDto> paradasActuales)
+        IntencionAsistenteDto intencion,
+        IReadOnlyList<ParadaActual> paradasActuales)
     {
-        if (paradasActuales.Count == 0
-            || !mensaje.Contains("cerca", StringComparison.OrdinalIgnoreCase))
+        if (!intencion.RadioMetros.HasValue || paradasActuales.Count == 0)
         {
             return null;
         }
 
-        return paradasActuales[0];
+        if (intencion.ParadaObjetivo is not null)
+        {
+            var objetivo = paradasActuales.FirstOrDefault(
+                parada => parada.Parada.Id == intencion.ParadaObjetivo.ParadaId);
+
+            if (objetivo is not null)
+            {
+                return objetivo.Lugar;
+            }
+        }
+
+        return paradasActuales[0].Lugar;
     }
 
-    private static bool MencionaAireLibre(string mensaje)
-        => mensaje.Contains("aire libre", StringComparison.OrdinalIgnoreCase)
-            || mensaje.Contains("parque", StringComparison.OrdinalIgnoreCase);
+    private static AccionPropuestaDto? ConstruirAccion(
+        IntencionAsistenteDto intencion,
+        IReadOnlyList<RecomendacionLugarDto> recomendaciones,
+        ItinerarioEntity? itinerario,
+        bool puedeAplicar)
+    {
+        if (!puedeAplicar
+            || intencion.Accion == TipoAccionAsistente.Recomendar
+            || recomendaciones.Count == 0
+            || itinerario is null
+            || string.IsNullOrWhiteSpace(itinerario.Version))
+        {
+            return null;
+        }
 
-    private static bool MencionaBajoTecho(string mensaje)
-        => mensaje.Contains("bajo techo", StringComparison.OrdinalIgnoreCase)
-            || mensaje.Contains("lluvia", StringComparison.OrdinalIgnoreCase);
+        if (intencion.Accion == TipoAccionAsistente.Reemplazar
+            && intencion.ParadaObjetivo is null)
+        {
+            return null;
+        }
+
+        return new AccionPropuestaDto
+        {
+            Tipo = intencion.Accion == TipoAccionAsistente.Agregar
+                ? "AgregarParada"
+                : "ReemplazarParada",
+            NumeroDia = itinerario.NumeroDia,
+            LugarId = recomendaciones[0].LugarId,
+            ParadaId = intencion.Accion == TipoAccionAsistente.Reemplazar
+                ? intencion.ParadaObjetivo!.ParadaId
+                : null,
+            Turno = intencion.Accion == TipoAccionAsistente.Agregar
+                ? intencion.Filtros.Turno?.ToString()
+                : null,
+            Version = itinerario.Version
+        };
+    }
+
+    private static string ConstruirMensaje(
+        IntencionAsistenteDto intencion,
+        int cantidad,
+        short? numeroDia)
+    {
+        if (cantidad == 0)
+        {
+            return "No encontré lugares que encajen con esos filtros. Probá con otra categoría o ampliá el presupuesto.";
+        }
+
+        return intencion.Accion switch
+        {
+            TipoAccionAsistente.Reemplazar when intencion.ParadaObjetivo is not null
+                => $"Encontré {cantidad} lugares para reemplazar “{intencion.ParadaObjetivo.Nombre}”.",
+            TipoAccionAsistente.Agregar
+                => $"Encontré {cantidad} lugares para agregar al día {numeroDia ?? 1}.",
+            _ => $"Encontré {cantidad} lugares que pueden encajar en tu recorrido."
+        };
+    }
 
     private static bool RequiereAptoNinos(Viaje viaje)
         => viaje.TipoViaje == TipoViaje.Familia
@@ -268,9 +394,15 @@ public class AsistenteService : IAsistenteService
             .Where(l => busqueda.SoloBajoTecho != true || l.EsBajoTecho)
             .Where(l => busqueda.AptoNinos != true || l.AptoNinos)
             .Where(l => busqueda.AccesibleMovilidadReducida != true || l.AccesibleMovilidadReducida)
+            .Where(l => string.IsNullOrWhiteSpace(busqueda.RestriccionDietaria)
+                || l.OpcionesDietarias.Any(opcion => CoincideDieta(opcion, busqueda.RestriccionDietaria)))
             .Where(l => busqueda.CategoriaCodigos is not { Count: > 0 }
                 || l.Categorias.Any(c => busqueda.CategoriaCodigos.Contains(c)))
             .Where(l => !busqueda.Barrio.HasValue || l.Barrio == busqueda.Barrio.Value);
+
+    private static bool CoincideDieta(string opcion, string restriccion)
+        => opcion.Contains(restriccion, StringComparison.OrdinalIgnoreCase)
+            || restriccion.Contains(opcion, StringComparison.OrdinalIgnoreCase);
 
     private static RecomendacionLugarDto MapearRecomendacion(LugarCandidatoDto lugar) => new()
     {
@@ -308,4 +440,8 @@ public class AsistenteService : IAsistenteService
         NivelPresupuesto.Equilibrado => 2,
         _ => 3
     };
+
+    private sealed record ParadaActual(
+        ParadaItinerario Parada,
+        LugarCandidatoDto Lugar);
 }
