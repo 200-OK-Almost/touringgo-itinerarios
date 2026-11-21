@@ -17,8 +17,9 @@ public class ViajeRepository : IViajeRepository
         _context = context;
     }
 
-    public Task<Viaje?> ObtenerPorIdAsync(Guid id, CancellationToken cancellationToken = default)
-        => _context.Viajes
+    public async Task<Viaje?> ObtenerPorIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var viaje = await _context.Viajes
             .Include(v => v.Miembros)
             .Include(v => v.Etiquetas)
             .Include(v => v.ParametrosFamilia)
@@ -27,6 +28,14 @@ public class ViajeRepository : IViajeRepository
             .Include(v => v.Itinerarios)
                 .ThenInclude(i => i.Paradas)
             .FirstOrDefaultAsync(v => v.Id == id, cancellationToken);
+
+        if (viaje is not null)
+        {
+            ItinerarioVersionLoader.Cargar(_context, viaje.Itinerarios);
+        }
+
+        return viaje;
+    }
 
     public async Task<ResultadoPaginado<Viaje>> ObtenerPaginadoPorUsuarioAsync(
         Guid usuarioId,
@@ -43,7 +52,7 @@ public class ViajeRepository : IViajeRepository
                 .ThenInclude(d => d.Etiquetas)
             .Include(v => v.Itinerarios)
                 .ThenInclude(i => i.Paradas)
-            .AsNoTracking();
+            .AsQueryable();
 
         var total = await query.CountAsync(cancellationToken);
 
@@ -52,6 +61,11 @@ public class ViajeRepository : IViajeRepository
             .Skip((pagina - 1) * tamano)
             .Take(tamano)
             .ToListAsync(cancellationToken);
+
+        foreach (var viaje in items)
+        {
+            ItinerarioVersionLoader.Cargar(_context, viaje.Itinerarios);
+        }
 
         return new ResultadoPaginado<Viaje>(items, total);
     }

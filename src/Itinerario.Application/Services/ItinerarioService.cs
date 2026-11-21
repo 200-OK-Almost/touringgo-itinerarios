@@ -14,6 +14,7 @@ public class ItinerarioService : IItinerarioService
     private readonly ILugaresClient _lugaresClient;
     private readonly IItinerarioGenerator _generator;
     private readonly IItinerarioRefiner _refiner;
+    private readonly IGeoCalculator _geo;
     private readonly IUsuariosClient _usuariosClient;
     private readonly IOllamaClient _ollamaClient;
     private readonly IInterpretacionService _interpretacionService;
@@ -24,6 +25,7 @@ public class ItinerarioService : IItinerarioService
         ILugaresClient lugaresClient,
         IItinerarioGenerator generator,
         IItinerarioRefiner refiner,
+        IGeoCalculator geo,
         IUsuariosClient usuariosClient,
         IOllamaClient ollamaClient,
         IInterpretacionService interpretacionService)
@@ -33,6 +35,7 @@ public class ItinerarioService : IItinerarioService
         _lugaresClient = lugaresClient;
         _generator = generator;
         _refiner = refiner;
+        _geo = geo;
         _usuariosClient = usuariosClient;
         _ollamaClient = ollamaClient;
         _interpretacionService = interpretacionService;
@@ -249,7 +252,17 @@ public class ItinerarioService : IItinerarioService
         try
         {
             var intencion = ConstruirIntencion(viaje, perfil, barrio, categoriaCodigos);
-            var semanticos = await _lugaresClient.BuscarSemanticoAsync(intencion, 20, cancellationToken);
+            var busqueda = new BusquedaSemanticaLugaresDto
+            {
+                Query = intencion,
+                Cantidad = 20,
+                Barrio = barrio,
+                CategoriaCodigos = categoriaCodigos.ToList()
+            };
+
+            var semanticos = await _lugaresClient.BuscarSemanticoAsync(
+                busqueda,
+                cancellationToken);
 
             var delBarrio = semanticos
                 .Where(l => l.Barrio == barrio)
@@ -412,7 +425,12 @@ public class ItinerarioService : IItinerarioService
                 .Where(lugar => !puntosPartida.Contains(lugar.Id))
                 .ToList();
 
-            _refiner.Refinar(tipo, itinerario, lugaresActuales, disponibles, viaje);
+            var modificado = _refiner.Refinar(tipo, itinerario, lugaresActuales, disponibles, viaje);
+
+            if (modificado)
+            {
+                _itinerarioRepository.MarcarModificado(itinerario);
+            }
         }
 
         await _itinerarioRepository.GuardarCambiosAsync(cancellationToken);
@@ -472,12 +490,334 @@ public class ItinerarioService : IItinerarioService
             {
                 _itinerarioRepository.AgregarParada(sugerencia);
             }
+
+            if (sugerencias.Count > 0)
+            {
+                _itinerarioRepository.MarcarModificado(itinerario);
+            }
         }
 
         await _itinerarioRepository.GuardarCambiosAsync(cancellationToken);
 
         return itinerarios.Select(MapearRespuesta).ToList();
     }
+
+    public async Task<IReadOnlyCollection<ItinerarioResponseDto>> AplicarAccionAsistenteAsync(
+        Guid viajeId,
+        AplicarAccionAsistenteDto dto,
+        Guid usuarioIdSolicitante,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(dto.Version))
+        {
+            throw new ReglaDeNegocioException("La versión del itinerario es obligatoria.");
+        }
+
+        var (viaje, itinerarios) = await PrepararModificacionAsync(
+            viajeId, dto.NumeroDia, usuarioIdSolicitante, cancellationToken);
+
+        var itinerario = itinerarios.FirstOrDefault(i => i.NumeroDia == dto.NumeroDia)
+            ?? throw new ReglaDeNegocioException(
+                $"El día {dto.NumeroDia} no existe en el viaje.");
+
+        if (!string.Equals(itinerario.Version, dto.Version, StringComparison.Ordinal))
+        {
+            throw new ConflictoDeConcurrenciaException(
+                "El itinerario cambió desde que se generó la propuesta. Recargá y volvé a intentar.");
+        }
+
+        switch ((dto.Tipo ?? string.Empty).Trim().ToLowerInvariant())
+        {
+            case "agregarparada":
+                await AgregarParadaAsistenteAsync(viaje, itinerario, dto, cancellationToken);
+                break;
+
+            case "reemplazarparada":
+                if (!dto.ParadaId.HasValue)
+                {
+                    throw new ReglaDeNegocioException(
+                        "Para reemplazar una parada, ParadaId es obligatorio.");
+                }
+
+                await ReemplazarParadaAsistenteAsync(viaje, itinerario, dto, cancellationToken);
+                break;
+
+            default:
+                throw new ReglaDeNegocioException(
+                    "El tipo de acción debe ser AgregarParada o ReemplazarParada.");
+        }
+
+        _itinerarioRepository.MarcarModificado(itinerario);
+        await _itinerarioRepository.GuardarCambiosAsync(cancellationToken);
+
+        return itinerarios.Select(MapearRespuesta).ToList();
+    }
+
+    private async Task AgregarParadaAsistenteAsync(
+        Viaje viaje,
+        ItinerarioEntity itinerario,
+        AplicarAccionAsistenteDto dto,
+        CancellationToken cancellationToken)
+    {
+        var lugar = await ObtenerLugarAsync(dto.LugarId, cancellationToken);
+        ValidarLugarNoDuplicado(viaje, itinerario, lugar.Id);
+
+        var turno = ElegirTurnoParaAgregar(itinerario, viaje, lugar, dto.Turno);
+        var orden = (short)(itinerario.Paradas
+            .Where(p => p.Turno == turno)
+            .Select(p => p.OrdenParada)
+            .DefaultIfEmpty((short)0)
+            .Max() + 1);
+
+        var (paradaAnterior, anterior) = await ObtenerAnteriorAsync(
+            itinerario,
+            turno,
+            orden,
+            cancellationToken);
+
+        var referencia = ObtenerReferencia(anterior, itinerario, viaje);
+        var metricas = CalcularMetricas(lugar, referencia);
+
+        itinerario.Paradas.Add(new ParadaItinerario
+        {
+            Id = Guid.NewGuid(),
+            ItinerarioId = itinerario.Id,
+            LugarId = lugar.Id,
+            Turno = turno,
+            OrdenParada = orden,
+            HoraInicio = CalcularHoraInicio(paradaAnterior, turno),
+            DuracionMinutos = lugar.DuracionSugeridaMinutos,
+            DistanciaMetrosDesdeAnterior = metricas.Distancia,
+            CuadrasDesdeAnterior = metricas.Cuadras,
+            MinutosAPieDesdeAnterior = metricas.Minutos,
+            OrigenParada = OrigenParada.Ia,
+            FechaCreacion = DateTimeOffset.UtcNow
+        });
+    }
+
+    private async Task ReemplazarParadaAsistenteAsync(
+        Viaje viaje,
+        ItinerarioEntity itinerario,
+        AplicarAccionAsistenteDto dto,
+        CancellationToken cancellationToken)
+    {
+        var parada = itinerario.Paradas.FirstOrDefault(p => p.Id == dto.ParadaId)
+            ?? throw new NotFoundException(
+                "No se encontró la parada indicada en el itinerario.");
+
+        if (parada.LugarId == dto.LugarId)
+        {
+            throw new ReglaDeNegocioException(
+                "El lugar indicado ya está en esa parada.");
+        }
+
+        var lugar = await ObtenerLugarAsync(dto.LugarId, cancellationToken);
+        ValidarLugarNoDuplicado(viaje, itinerario, lugar.Id, parada.Id);
+
+        var (_, anterior) = await ObtenerAnteriorAsync(
+            itinerario,
+            parada.Turno,
+            parada.OrdenParada,
+            cancellationToken);
+
+        var referencia = ObtenerReferencia(anterior, itinerario, viaje);
+        var metricas = CalcularMetricas(lugar, referencia);
+
+        parada.LugarId = lugar.Id;
+        parada.DuracionMinutos = lugar.DuracionSugeridaMinutos;
+        parada.DistanciaMetrosDesdeAnterior = metricas.Distancia;
+        parada.CuadrasDesdeAnterior = metricas.Cuadras;
+        parada.MinutosAPieDesdeAnterior = metricas.Minutos;
+        parada.OrigenParada = OrigenParada.Ia;
+    }
+
+    private async Task<LugarCandidatoDto> ObtenerLugarAsync(
+        Guid lugarId,
+        CancellationToken cancellationToken)
+        => await _lugaresClient.ObtenerPorIdAsync(lugarId, cancellationToken)
+            ?? throw new NotFoundException($"No se encontró el lugar con id {lugarId}.");
+
+    private static void ValidarLugarNoDuplicado(
+        Viaje viaje,
+        ItinerarioEntity itinerario,
+        Guid lugarId,
+        Guid? paradaExcluida = null)
+    {
+        var existe = viaje.Itinerarios
+            .SelectMany(i => i.Paradas)
+            .Concat(itinerario.Paradas)
+            .Any(p => p.LugarId == lugarId && p.Id != paradaExcluida);
+
+        if (existe)
+        {
+            throw new ConflictoDeConcurrenciaException(
+                "El lugar ya está en el itinerario.");
+        }
+    }
+
+    private async Task<(ParadaItinerario? Parada, LugarCandidatoDto? Lugar)> ObtenerAnteriorAsync(
+        ItinerarioEntity itinerario,
+        Turno turno,
+        short orden,
+        CancellationToken cancellationToken)
+    {
+        var anterior = itinerario.Paradas
+            .Where(p => p.Turno == turno && p.OrdenParada < orden)
+            .OrderByDescending(p => p.OrdenParada)
+            .FirstOrDefault();
+
+        if (anterior is null)
+        {
+            return (null, null);
+        }
+
+        var lugar = await _lugaresClient.ObtenerPorIdAsync(anterior.LugarId, cancellationToken);
+
+        return (anterior, lugar);
+    }
+
+    private static Turno ElegirTurnoParaAgregar(
+        ItinerarioEntity itinerario,
+        Viaje viaje,
+        LugarCandidatoDto lugar,
+        string? turnoSolicitado)
+    {
+        var turnos = TurnosSegunAlcance(viaje.AlcanceTemporal);
+        var ocupados = itinerario.Paradas.Select(p => p.Turno).ToHashSet();
+
+        if (!string.IsNullOrWhiteSpace(turnoSolicitado))
+        {
+            if (!Enum.TryParse<Turno>(turnoSolicitado, ignoreCase: true, out var turno))
+            {
+                throw new ReglaDeNegocioException($"Turno inválido: {turnoSolicitado}.");
+            }
+
+            if (!turnos.Contains(turno))
+            {
+                throw new ReglaDeNegocioException(
+                    $"El turno {turno} no está disponible para este viaje.");
+            }
+
+            if (ocupados.Contains(turno))
+            {
+                throw new ConflictoDeConcurrenciaException(
+                    $"El turno {turno} ya tiene una parada.");
+            }
+
+            if (!ReglasTurno.EsCompatible(turno, lugar))
+            {
+                throw new ReglaDeNegocioException(
+                    $"El lugar no es compatible con el turno {turno}.");
+            }
+
+            return turno;
+        }
+
+        Turno? compatible = turnos
+            .Where(t => !ocupados.Contains(t) && ReglasTurno.EsCompatible(t, lugar))
+            .Select(t => (Turno?)t)
+            .FirstOrDefault();
+
+        if (compatible.HasValue)
+        {
+            return compatible.Value;
+        }
+
+        Turno? libre = turnos
+            .Where(t => !ocupados.Contains(t))
+            .Select(t => (Turno?)t)
+            .FirstOrDefault();
+
+        return libre
+            ?? throw new ReglaDeNegocioException("No hay turnos libres en este día.");
+    }
+
+    private static (double lat, double lon)? ObtenerReferencia(
+        LugarCandidatoDto? anterior,
+        ItinerarioEntity itinerario,
+        Viaje viaje)
+    {
+        if (anterior is not null)
+        {
+            return ((double)anterior.Latitud, (double)anterior.Longitud);
+        }
+
+        return ObtenerOrigen(itinerario, viaje);
+    }
+
+    private static (double lat, double lon)? ObtenerOrigen(
+        ItinerarioEntity itinerario,
+        Viaje viaje)
+    {
+        if (itinerario.OrigenLatitud.HasValue && itinerario.OrigenLongitud.HasValue)
+        {
+            return ((double)itinerario.OrigenLatitud.Value, (double)itinerario.OrigenLongitud.Value);
+        }
+
+        if (viaje.LatitudPartida.HasValue && viaje.LongitudPartida.HasValue)
+        {
+            return ((double)viaje.LatitudPartida.Value, (double)viaje.LongitudPartida.Value);
+        }
+
+        return null;
+    }
+
+    private (int? Distancia, short? Cuadras, short? Minutos) CalcularMetricas(
+        LugarCandidatoDto lugar,
+        (double lat, double lon)? referencia)
+    {
+        if (referencia is null)
+        {
+            return (null, null, null);
+        }
+
+        var metros = _geo.DistanciaMetros(
+            referencia.Value.lat,
+            referencia.Value.lon,
+            (double)lugar.Latitud,
+            (double)lugar.Longitud);
+
+        return (
+            (int)Math.Round(metros),
+            (short)_geo.Cuadras(metros),
+            (short)_geo.MinutosAPie(metros));
+    }
+
+    private static TimeOnly CalcularHoraInicio(
+        ParadaItinerario? anterior,
+        Turno turno)
+    {
+        if (anterior?.HoraInicio is { } hora)
+        {
+            var duracion = anterior.DuracionMinutos ?? 0;
+            return hora.AddMinutes(duracion + 15);
+        }
+
+        return TimeOnly.FromTimeSpan(TimeSpan.FromMinutes(HoraBaseMinutos(turno)));
+    }
+
+    private static int HoraBaseMinutos(Turno turno) => turno switch
+    {
+        Turno.Manana => 9 * 60,
+        Turno.Mediodia => 13 * 60,
+        Turno.Tarde => 16 * 60,
+        Turno.Noche => 20 * 60,
+        _ => 9 * 60
+    };
+
+    private static IReadOnlyList<Turno> TurnosSegunAlcance(AlcanceTemporal alcance) => alcance switch
+    {
+        AlcanceTemporal.DiaCompleto => new[]
+        {
+            Turno.Manana,
+            Turno.Mediodia,
+            Turno.Tarde,
+            Turno.Noche
+        },
+        AlcanceTemporal.TardeNoche => new[] { Turno.Tarde, Turno.Noche },
+        AlcanceTemporal.MananaAlmuerzo => new[] { Turno.Manana, Turno.Mediodia },
+        _ => new[] { Turno.Tarde }
+    };
 
     private async Task<(Viaje Viaje, IReadOnlyCollection<ItinerarioEntity> Itinerarios)> PrepararModificacionAsync(
         Guid viajeId,
@@ -586,6 +926,7 @@ public class ItinerarioService : IItinerarioService
         OrigenDescripcion = itinerario.OrigenDescripcion,
         OrigenLatitud = itinerario.OrigenLatitud,
         OrigenLongitud = itinerario.OrigenLongitud,
+        Version = itinerario.Version,
         Paradas = itinerario.Paradas
             .OrderBy(p => p.Turno)
             .ThenBy(p => p.OrdenParada)

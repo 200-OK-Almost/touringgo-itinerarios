@@ -10,4 +10,5 @@ public interface IItinerarioService
     Task<IReadOnlyCollection<ItinerarioResponseDto>> RefinarAsync(Guid viajeId, TipoRefinamiento tipo, short? numeroDia, Guid usuarioIdSolicitante, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<ItinerarioResponseDto>> RefinarPorTextoAsync(Guid viajeId, string texto, short? numeroDia, Guid usuarioIdSolicitante, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<ItinerarioResponseDto>> SugerirTurnosLibresAsync(Guid viajeId, short? numeroDia, Guid usuarioIdSolicitante, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<ItinerarioResponseDto>> AplicarAccionAsistenteAsync(Guid viajeId, AplicarAccionAsistenteDto dto, Guid usuarioIdSolicitante, CancellationToken cancellationToken = default);
 }

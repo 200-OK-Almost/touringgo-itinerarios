@@ -232,8 +232,7 @@ public class ViajeServiceTests
                 Array.Empty<LugarCandidatoDto>());
 
         public Task<IReadOnlyCollection<LugarCandidatoDto>> BuscarSemanticoAsync(
-            string query,
-            int cantidad,
+            BusquedaSemanticaLugaresDto busqueda,
             CancellationToken cancellationToken = default)
             => throw new ServicioExternoNoDisponibleException("Sin búsqueda semántica en tests.");
     }

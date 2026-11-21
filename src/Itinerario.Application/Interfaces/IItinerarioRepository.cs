@@ -9,4 +9,5 @@ public interface IItinerarioRepository
     Task ReemplazarAsync(Guid viajeId, IReadOnlyCollection<ItinerarioEntity> itinerarios, CancellationToken cancellationToken = default);
     Task<int> GuardarCambiosAsync(CancellationToken cancellationToken = default);
     void AgregarParada(ParadaItinerario parada);
+    void MarcarModificado(ItinerarioEntity itinerario);
 }

@@ -506,6 +506,7 @@ public class ViajeService : IViajeService
         OrigenDescripcion = itinerario.OrigenDescripcion,
         OrigenLatitud = itinerario.OrigenLatitud,
         OrigenLongitud = itinerario.OrigenLongitud,
+        Version = itinerario.Version,
         Paradas = itinerario.Paradas
             .OrderBy(p => p.Turno)
             .ThenBy(p => p.OrdenParada)

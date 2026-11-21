@@ -50,6 +50,8 @@ public class ItinerarioConfiguration : IEntityTypeConfiguration<ItinerarioEntity
             .HasColumnName("fecha_actualizacion")
             .IsRequired();
 
+        builder.Ignore(i => i.Version);
+
         builder.HasIndex(i => new { i.ViajeId, i.NumeroDia })
             .IsUnique();
 

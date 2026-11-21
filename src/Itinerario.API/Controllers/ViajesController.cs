@@ -17,6 +17,7 @@ public class ViajesController : ControllerBase
     private readonly IViajeService _service;
     private readonly IItinerarioService _itinerarioService;
     private readonly IInterpretacionService _interpretacionService;
+    private readonly IAsistenteService _asistenteService;
     private readonly ICurrentUser _currentUser;
     private readonly IOptions<AsistenteOptions> _asistenteOptions;
 
@@ -24,12 +25,14 @@ public class ViajesController : ControllerBase
         IViajeService service,
         IItinerarioService itinerarioService,
         IInterpretacionService interpretacionService,
+        IAsistenteService asistenteService,
         ICurrentUser currentUser,
         IOptions<AsistenteOptions> asistenteOptions)
     {
         _service = service;
         _itinerarioService = itinerarioService;
         _interpretacionService = interpretacionService;
+        _asistenteService = asistenteService;
         _currentUser = currentUser;
         _asistenteOptions = asistenteOptions;
     }
@@ -112,6 +115,55 @@ public class ViajesController : ControllerBase
         Guid id,
         CancellationToken cancellationToken)
         => Ok(await _itinerarioService.ObtenerAsync(id, _currentUser.UsuarioId, cancellationToken));
+
+    [HttpPost("{id:guid}/asistente")]
+    [EnableRateLimiting(AsistenteRateLimitPolicies.Viaje)]
+    [ProducesResponseType(typeof(AsistenteResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AsistenteResponseDto>> Asistente(
+        Guid id,
+        [FromBody] AsistenteRequestDto dto,
+        CancellationToken cancellationToken)
+    {
+        if (!_asistenteOptions.Value.Enabled)
+        {
+            return NotFound(new { mensaje = "El asistente no está habilitado." });
+        }
+
+        var respuesta = await _asistenteService.ResponderAsync(
+            id,
+            dto,
+            _currentUser.UsuarioId,
+            cancellationToken);
+
+        return Ok(respuesta);
+    }
+
+    [HttpPost("{id:guid}/asistente/aplicar")]
+    [EnableRateLimiting(AsistenteRateLimitPolicies.Viaje)]
+    [ProducesResponseType(typeof(IReadOnlyCollection<ItinerarioResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<IReadOnlyCollection<ItinerarioResponseDto>>> AplicarAccionAsistente(
+        Guid id,
+        [FromBody] AplicarAccionAsistenteDto dto,
+        CancellationToken cancellationToken)
+    {
+        if (!_asistenteOptions.Value.Enabled)
+        {
+            return NotFound(new { mensaje = "El asistente no está habilitado." });
+        }
+
+        var itinerarios = await _itinerarioService.AplicarAccionAsistenteAsync(
+            id,
+            dto,
+            _currentUser.UsuarioId,
+            cancellationToken);
+
+        return Ok(itinerarios);
+    }
 
     [HttpPost("{id:guid}/refinar")]
     [ProducesResponseType(typeof(IReadOnlyCollection<ItinerarioResponseDto>), StatusCodes.Status200OK)]

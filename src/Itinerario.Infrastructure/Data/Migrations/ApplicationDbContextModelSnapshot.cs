@@ -99,6 +99,12 @@ namespace Itinerario.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("viaje_id");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ViajeId", "NumeroDia")

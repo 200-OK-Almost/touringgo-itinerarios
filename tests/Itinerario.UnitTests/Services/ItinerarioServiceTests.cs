@@ -254,6 +254,7 @@ public class ItinerarioServiceTests
             lugares,
             new ItinerarioGenerator(geo),
             new ItinerarioRefiner(geo),
+            geo,
             new UsuariosClientFalso(),
             new OllamaClientFalso(),
             new InterpretacionServiceFalso());
@@ -409,8 +410,7 @@ public class ItinerarioServiceTests
         }
 
         public Task<IReadOnlyCollection<LugarCandidatoDto>> BuscarSemanticoAsync(
-            string query,
-            int cantidad,
+            BusquedaSemanticaLugaresDto busqueda,
             CancellationToken cancellationToken = default)
             => throw new ServicioExternoNoDisponibleException("Sin búsqueda semántica en tests.");
 
@@ -508,6 +508,8 @@ public class ItinerarioServiceTests
 
         public List<ParadaItinerario> ParadasAgregadas { get; } = new();
 
+        public List<ItinerarioEntity> ItinerariosModificados { get; } = new();
+
         public Task<IReadOnlyCollection<ItinerarioEntity>> ObtenerPorViajeAsync(
             Guid viajeId,
             CancellationToken cancellationToken = default)
@@ -528,6 +530,9 @@ public class ItinerarioServiceTests
 
         public void AgregarParada(ParadaItinerario parada)
             => ParadasAgregadas.Add(parada);
+
+        public void MarcarModificado(ItinerarioEntity itinerario)
+            => ItinerariosModificados.Add(itinerario);
     }
 
     private sealed class UsuariosClientFalso : IUsuariosClient
