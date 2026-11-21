@@ -14,6 +14,7 @@ public class Itinerario
     public decimal? OrigenLongitud { get; set; }
     public DateTimeOffset FechaCreacion { get; set; }
     public DateTimeOffset FechaActualizacion { get; set; }
+    public string? Version { get; set; }
 
     public Viaje? Viaje { get; set; }
     public ICollection<ParadaItinerario> Paradas { get; set; } = new List<ParadaItinerario>();

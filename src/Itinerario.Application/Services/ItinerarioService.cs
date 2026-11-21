@@ -422,7 +422,12 @@ public class ItinerarioService : IItinerarioService
                 .Where(lugar => !puntosPartida.Contains(lugar.Id))
                 .ToList();
 
-            _refiner.Refinar(tipo, itinerario, lugaresActuales, disponibles, viaje);
+            var modificado = _refiner.Refinar(tipo, itinerario, lugaresActuales, disponibles, viaje);
+
+            if (modificado)
+            {
+                _itinerarioRepository.MarcarModificado(itinerario);
+            }
         }
 
         await _itinerarioRepository.GuardarCambiosAsync(cancellationToken);
@@ -481,6 +486,11 @@ public class ItinerarioService : IItinerarioService
             foreach (var sugerencia in sugerencias)
             {
                 _itinerarioRepository.AgregarParada(sugerencia);
+            }
+
+            if (sugerencias.Count > 0)
+            {
+                _itinerarioRepository.MarcarModificado(itinerario);
             }
         }
 
@@ -596,6 +606,7 @@ public class ItinerarioService : IItinerarioService
         OrigenDescripcion = itinerario.OrigenDescripcion,
         OrigenLatitud = itinerario.OrigenLatitud,
         OrigenLongitud = itinerario.OrigenLongitud,
+        Version = itinerario.Version,
         Paradas = itinerario.Paradas
             .OrderBy(p => p.Turno)
             .ThenBy(p => p.OrdenParada)

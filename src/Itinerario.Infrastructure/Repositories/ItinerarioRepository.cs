@@ -19,11 +19,17 @@ public class ItinerarioRepository : IItinerarioRepository
     public async Task<IReadOnlyCollection<ItinerarioEntity>> ObtenerPorViajeAsync(
         Guid viajeId,
         CancellationToken cancellationToken = default)
-        => await _context.Itinerarios
+    {
+        var itinerarios = await _context.Itinerarios
             .Include(i => i.Paradas)
             .Where(i => i.ViajeId == viajeId)
             .OrderBy(i => i.NumeroDia)
             .ToListAsync(cancellationToken);
+
+        ItinerarioVersionLoader.Cargar(_context, itinerarios);
+
+        return itinerarios;
+    }
 
     public async Task ReemplazarAsync(
         Guid viajeId,
@@ -43,6 +49,7 @@ public class ItinerarioRepository : IItinerarioRepository
 
             await _context.Itinerarios.AddRangeAsync(itinerarios, cancellationToken);
             await _context.SaveChangesAsync(cancellationToken);
+            ItinerarioVersionLoader.Cargar(_context, itinerarios);
 
             await transaccion.CommitAsync(cancellationToken);
         }
@@ -67,4 +74,12 @@ public class ItinerarioRepository : IItinerarioRepository
 
     public void AgregarParada(ParadaItinerario parada)
         => _context.ParadasItinerario.Add(parada);
+
+    public void MarcarModificado(ItinerarioEntity itinerario)
+    {
+        itinerario.FechaActualizacion = DateTimeOffset.UtcNow;
+        _context.Entry(itinerario)
+            .Property(i => i.FechaActualizacion)
+            .IsModified = true;
+    }
 }

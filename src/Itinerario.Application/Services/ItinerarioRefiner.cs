@@ -15,13 +15,14 @@ public class ItinerarioRefiner : IItinerarioRefiner
         _geo = geo;
     }
 
-    public void Refinar(
+    public bool Refinar(
         TipoRefinamiento tipo,
         ItinerarioEntity itinerario,
         IReadOnlyDictionary<Guid, LugarCandidatoDto> lugaresActuales,
         ICollection<LugarCandidatoDto> candidatos,
         Viaje viaje)
     {
+        var modificado = false;
         var paradas = itinerario.Paradas
             .OrderBy(p => p.Turno)
             .ThenBy(p => p.OrdenParada)
@@ -59,7 +60,10 @@ public class ItinerarioRefiner : IItinerarioRefiner
             candidatos.Add(actual);
 
             AplicarReemplazo(parada, reemplazo, referencia);
+            modificado = true;
         }
+
+        return modificado;
     }
 
     public IReadOnlyCollection<ParadaItinerario> SugerirTurnosLibres(

@@ -29,6 +29,10 @@ public class ApplicationDbContext : DbContext
             .Property<uint>("xmin")
             .IsRowVersion();
 
+        modelBuilder.Entity<ItinerarioEntity>()
+            .Property<uint>("xmin")
+            .IsRowVersion();
+
         base.OnModelCreating(modelBuilder);
     }
 }

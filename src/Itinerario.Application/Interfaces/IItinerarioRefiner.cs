@@ -7,7 +7,7 @@ namespace Itinerario.Application.Interfaces;
 
 public interface IItinerarioRefiner
 {
-    void Refinar(
+    bool Refinar(
         TipoRefinamiento tipo,
         ItinerarioEntity itinerario,
         IReadOnlyDictionary<Guid, LugarCandidatoDto> lugaresActuales,
