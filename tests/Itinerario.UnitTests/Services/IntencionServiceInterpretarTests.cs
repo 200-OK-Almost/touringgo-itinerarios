@@ -164,6 +164,80 @@ public class IntencionServiceInterpretarTests
     }
 
     [Fact]
+    public void Interpretar_Reemplazo_QuerySinBarrioNiObjetivo()
+    {
+        var museo = CrearParada("Museo de Arte", Turno.Manana, 1, "museos_galerias");
+
+        var intencion = _service.Interpretar(
+            "Reemplazá el museo por un café en Palermo",
+            new[] { museo });
+
+        Assert.Equal(TipoAccionAsistente.Reemplazar, intencion.Accion);
+        Assert.Equal("cafe", intencion.QuerySemantica);
+        Assert.DoesNotContain("museo", intencion.QuerySemantica);
+        Assert.DoesNotContain("palermo", intencion.QuerySemantica);
+    }
+
+    [Fact]
+    public void Interpretar_PrecioModerado()
+    {
+        var intencion = _service.Interpretar(
+            "Agregá un café moderado",
+            Array.Empty<ParadaResolubleDto>());
+
+        Assert.Equal((short?)2, intencion.Filtros.NivelPrecioMaximo);
+    }
+
+    [Fact]
+    public void Interpretar_DietaSinGluten()
+    {
+        var intencion = _service.Interpretar(
+            "Agregá un restaurante sin gluten",
+            Array.Empty<ParadaResolubleDto>());
+
+        Assert.Equal("sin gluten", intencion.Filtros.RestriccionDietaria);
+        Assert.Contains("gastronomia_clasica", intencion.Filtros.CategoriaCodigos);
+    }
+
+    [Fact]
+    public void Interpretar_AgregarConParadas_NoResuelveObjetivo()
+    {
+        var cafe = CrearParada("Café", Turno.Manana, 1, "cafe_especialidad");
+
+        var intencion = _service.Interpretar("Agregá un café", new[] { cafe });
+
+        Assert.Equal(TipoAccionAsistente.Agregar, intencion.Accion);
+        Assert.Null(intencion.ParadaObjetivo);
+        Assert.Null(intencion.Aclaracion);
+        Assert.Equal("cafe", intencion.QuerySemantica);
+    }
+
+    [Fact]
+    public void Interpretar_TargetInexistente_DevuelveAclaracion()
+    {
+        var cafe = CrearParada("Café", Turno.Manana, 1, "cafe_especialidad");
+
+        var intencion = _service.Interpretar(
+            "Reemplazá la librería por un bar",
+            new[] { cafe });
+
+        Assert.Null(intencion.ParadaObjetivo);
+        Assert.NotNull(intencion.Aclaracion);
+        Assert.Single(intencion.Aclaracion!.Opciones);
+        Assert.Equal("bar", intencion.QuerySemantica);
+    }
+
+    [Fact]
+    public void Interpretar_TurnoUsaLaPrimeraMencion()
+    {
+        var intencion = _service.Interpretar(
+            "Agregá un bar para la noche o la tarde",
+            Array.Empty<ParadaResolubleDto>());
+
+        Assert.Equal(Turno.Noche, intencion.Filtros.Turno);
+    }
+
+    [Fact]
     public void Interpretar_MensajeVacio_DevuelveValoresSeguros()
     {
         var intencion = _service.Interpretar("   ");

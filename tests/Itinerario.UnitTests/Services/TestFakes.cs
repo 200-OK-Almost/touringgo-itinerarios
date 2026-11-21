@@ -319,7 +319,11 @@ internal static class TestData
         short duracionMinutos = 60,
         decimal latitud = -34.58m,
         decimal longitud = -58.42m,
-        IReadOnlyCollection<string>? opcionesDietarias = null)
+        IReadOnlyCollection<string>? opcionesDietarias = null,
+        bool esAireLibre = false,
+        bool esBajoTecho = true,
+        bool aptoNinos = true,
+        bool accesible = true)
         => new()
         {
             Id = Guid.NewGuid(),
@@ -330,10 +334,10 @@ internal static class TestData
             NivelPrecio = NivelPresupuesto.Equilibrado,
             DuracionSugeridaMinutos = duracionMinutos,
             Categorias = new[] { categoria },
-            EsAireLibre = false,
-            EsBajoTecho = true,
-            AptoNinos = true,
-            AccesibleMovilidadReducida = true,
+            EsAireLibre = esAireLibre,
+            EsBajoTecho = esBajoTecho,
+            AptoNinos = aptoNinos,
+            AccesibleMovilidadReducida = accesible,
             OpcionesDietarias = opcionesDietarias ?? Array.Empty<string>()
         };
 }
