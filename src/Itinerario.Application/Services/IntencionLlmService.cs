@@ -34,6 +34,10 @@ public class IntencionLlmService : IIntencionLlmService
             return null;
         }
 
+        using var actividad = _telemetry.IniciarActividad(
+            "asistente.intent_llm",
+            contexto.ViajeId);
+
         var etapa = Stopwatch.StartNew();
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -45,27 +49,32 @@ public class IntencionLlmService : IIntencionLlmService
                 ConstruirPrompt(contexto),
                 timeoutCts.Token);
 
+            actividad?.SetTag("asistente.resultado", "llm_ok");
             _telemetry.RegistrarResultado("llm_ok", 0, contexto.ViajeId);
 
             return resultado;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
+            actividad?.SetTag("asistente.resultado", "llm_timeout");
             _telemetry.RegistrarResultado("llm_timeout", 0, contexto.ViajeId);
             return null;
         }
         catch (ServicioExternoNoDisponibleException)
         {
+            actividad?.SetTag("asistente.resultado", "llm_error");
             _telemetry.RegistrarResultado("llm_error", 0, contexto.ViajeId);
             return null;
         }
         catch (JsonException)
         {
+            actividad?.SetTag("asistente.resultado", "llm_error");
             _telemetry.RegistrarResultado("llm_error", 0, contexto.ViajeId);
             return null;
         }
         catch (InvalidOperationException)
         {
+            actividad?.SetTag("asistente.resultado", "llm_error");
             _telemetry.RegistrarResultado("llm_error", 0, contexto.ViajeId);
             return null;
         }

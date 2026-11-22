@@ -37,6 +37,10 @@ public class MensajeLlmService : IMensajeLlmService
             return null;
         }
 
+        using var actividad = _telemetry.IniciarActividad(
+            "asistente.generation_llm",
+            contexto.ViajeId);
+
         var etapa = Stopwatch.StartNew();
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -52,31 +56,37 @@ public class MensajeLlmService : IMensajeLlmService
 
             if (mensaje is null)
             {
+                actividad?.SetTag("asistente.resultado", "llm_error");
                 _telemetry.RegistrarResultado("llm_error", contexto.Recomendaciones.Count, contexto.ViajeId);
                 return null;
             }
 
+            actividad?.SetTag("asistente.resultado", "llm_ok");
             _telemetry.RegistrarResultado("llm_ok", contexto.Recomendaciones.Count, contexto.ViajeId);
 
             return mensaje;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
+            actividad?.SetTag("asistente.resultado", "llm_timeout");
             _telemetry.RegistrarResultado("llm_timeout", contexto.Recomendaciones.Count, contexto.ViajeId);
             return null;
         }
         catch (ServicioExternoNoDisponibleException)
         {
+            actividad?.SetTag("asistente.resultado", "llm_error");
             _telemetry.RegistrarResultado("llm_error", contexto.Recomendaciones.Count, contexto.ViajeId);
             return null;
         }
         catch (JsonException)
         {
+            actividad?.SetTag("asistente.resultado", "llm_error");
             _telemetry.RegistrarResultado("llm_error", contexto.Recomendaciones.Count, contexto.ViajeId);
             return null;
         }
         catch (InvalidOperationException)
         {
+            actividad?.SetTag("asistente.resultado", "llm_error");
             _telemetry.RegistrarResultado("llm_error", contexto.Recomendaciones.Count, contexto.ViajeId);
             return null;
         }

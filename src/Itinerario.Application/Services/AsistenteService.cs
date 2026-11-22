@@ -45,6 +45,7 @@ public class AsistenteService : IAsistenteService
         CancellationToken cancellationToken = default)
     {
         var total = Stopwatch.StartNew();
+        using var actividad = _telemetry.IniciarActividad("asistente.consulta", viajeId);
 
         var mensaje = request.Mensaje?.Trim() ?? string.Empty;
 
@@ -129,6 +130,7 @@ public class AsistenteService : IAsistenteService
                 Aclaracion = intencion.Aclaracion
             };
 
+            actividad?.SetTag("asistente.resultado", "aclaracion");
             _telemetry.RegistrarResultado("aclaracion", 0, viajeId);
             _telemetry.RegistrarEtapa("total", total.Elapsed, viajeId);
 
@@ -175,13 +177,18 @@ public class AsistenteService : IAsistenteService
         var falloSemantico = false;
         IReadOnlyCollection<LugarCandidatoDto> lugares = Array.Empty<LugarCandidatoDto>();
 
-        try
+        using (var actividadRetrieval = _telemetry.IniciarActividad("asistente.retrieval", viajeId))
         {
-            lugares = await _lugaresClient.BuscarSemanticoAsync(busqueda, cancellationToken);
-        }
-        catch (ServicioExternoNoDisponibleException)
-        {
-            falloSemantico = true;
+            try
+            {
+                lugares = await _lugaresClient.BuscarSemanticoAsync(busqueda, cancellationToken);
+            }
+            catch (ServicioExternoNoDisponibleException)
+            {
+                falloSemantico = true;
+            }
+
+            actividadRetrieval?.SetTag("asistente.fallo_semantico", falloSemantico);
         }
 
         _telemetry.RegistrarEtapa("retrieval", retrieval.Elapsed, viajeId);
@@ -252,10 +259,16 @@ public class AsistenteService : IAsistenteService
                 : null
         };
 
-        _telemetry.RegistrarResultado(
-            recomendaciones.Count == 0 ? "sin_resultados" : usoFallback ? "fallback" : "ok",
-            recomendaciones.Count,
-            viajeId);
+        var estado = recomendaciones.Count == 0
+            ? "sin_resultados"
+            : usoFallback
+                ? "fallback"
+                : "ok";
+
+        actividad?.SetTag("asistente.resultado", estado);
+        actividad?.SetTag("asistente.recomendaciones", recomendaciones.Count);
+
+        _telemetry.RegistrarResultado(estado, recomendaciones.Count, viajeId);
         _telemetry.RegistrarEtapa("total", total.Elapsed, viajeId);
 
         return resultado;

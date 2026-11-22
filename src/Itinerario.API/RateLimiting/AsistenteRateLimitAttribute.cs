@@ -1,4 +1,5 @@
 using Itinerario.Application.Configuration;
+using Itinerario.Infrastructure.Telemetry;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.Extensions.DependencyInjection;
@@ -41,6 +42,8 @@ public sealed class AsistenteRateLimitAttribute : Attribute, IAsyncActionFilter
 
         if (!decision.Permitido)
         {
+            AsistenteMetrics.RegistrarRateLimitRechazado(_policy);
+
             await AsistenteRateLimitResponse.EscribirAsync(
                 httpContext,
                 decision.RetryAfter,
