@@ -1,196 +1,186 @@
-using Itinerario.API.RateLimiting;
-using Itinerario.Application.Configuration;
 using Itinerario.Application.DTOs;
-using Itinerario.Application.Interfaces;
+using Itinerario.Application.DTOs.Gastos;
+using Itinerario.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.Extensions.Options;
-
-namespace Itinerario.API.Controllers;
+using System.Security.Claims;
 
 [ApiController]
-[Route("api/viajes")]
 [Authorize]
-public class GasatosController : ControllerBase
+[Route("api/viajes/{viajeId:guid}/gastos")]
+public sealed class GastosController : ControllerBase
 {
-    private readonly IViajeService _service;
-    private readonly IGastosService _asistenteOptions;
+    private readonly IGastosService _gastoService;
 
-    public ViajesController(
-        IViajeService service,
-        IItinerarioService itinerarioService,
-        IInterpretacionService interpretacionService,
-        IAsistenteService asistenteService,
-        ICurrentUser currentUser,
-        IOptions<AsistenteOptions> asistenteOptions)
+    public GastosController(IGastosService gastoService)
     {
-        _service = service;
-        _itinerarioService = itinerarioService;
-        _interpretacionService = interpretacionService;
-        _asistenteService = asistenteService;
-        _currentUser = currentUser;
-        _asistenteOptions = asistenteOptions;
+        _gastoService = gastoService;
     }
 
-    [HttpPost]
-    [ProducesResponseType(typeof(ViajeResponseDto), StatusCodes.Status201Created)]
-    public async Task<ActionResult<ViajeResponseDto>> Crear(
-        [FromBody] ViajeCreateDto dto,
-        CancellationToken cancellationToken)
-    {
-        var viaje = await _service.CrearAsync(dto, _currentUser.UsuarioId, cancellationToken);
-
-        return CreatedAtAction(nameof(ObtenerPorId), new { id = viaje.Id }, viaje);
-    }
-
-    [HttpPost("bosquejo")]
-    [ProducesResponseType(typeof(BosquejoViajeDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
-    public async Task<ActionResult<BosquejoViajeDto>> InterpretarBosquejo(
-        [FromBody] BosquejoRequestDto dto,
-        CancellationToken cancellationToken)
-        => Ok(await _interpretacionService.InterpretarAsync(dto.Texto, cancellationToken));
-
+    // GET /api/viajes/{viajeId}/gastos
     [HttpGet]
-    public async Task<ActionResult<ResultadoPaginadoDto<ViajeResponseDto>>> Listar(
-        [FromQuery] int pagina = 1,
-        [FromQuery] int tamano = 20,
-        CancellationToken cancellationToken = default)
-        => Ok(await _service.ObtenerTodosAsync(_currentUser.UsuarioId, pagina, tamano, cancellationToken));
-
-    [HttpGet("asistente/capacidades")]
-    [EnableRateLimiting(AsistenteRateLimitPolicies.Usuario)]
-    [ProducesResponseType(typeof(AsistenteCapacidadesDto), StatusCodes.Status200OK)]
-    public ActionResult<AsistenteCapacidadesDto> ObtenerCapacidadesAsistente()
-        => Ok(AsistenteCapacidadesDto.Desde(_asistenteOptions.Value));
-
-    [HttpGet("{id:guid}")]
-    public async Task<ActionResult<ViajeResponseDto>> ObtenerPorId(
-        Guid id,
-        CancellationToken cancellationToken)
-        => Ok(await _service.ObtenerPorIdAsync(id, _currentUser.UsuarioId, cancellationToken));
-
-    [HttpPut("{id:guid}")]
-    public async Task<ActionResult<ViajeResponseDto>> Actualizar(
-        Guid id,
-        [FromBody] ViajeUpdateDto dto,
-        CancellationToken cancellationToken)
-        => Ok(await _service.ActualizarAsync(id, dto, _currentUser.UsuarioId, cancellationToken));
-
-    [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Eliminar(Guid id, CancellationToken cancellationToken)
+    [ProducesResponseType(
+        typeof(ResultadoPaginadoDto<GastoDto>),
+        StatusCodes.Status200OK)]
+    public async Task<ActionResult<ResultadoPaginadoDto<GastoDto>>> Listar(
+        [FromRoute] Guid viajeId,
+        [FromQuery] FiltroGastosDto filtro,
+        CancellationToken ct)
     {
-        await _service.EliminarAsync(id, _currentUser.UsuarioId, cancellationToken);
+        var usuarioId = ObtenerUsuarioActualId();
+
+        var resultado = await _gastoService.ListarAsync(
+            viajeId,
+            usuarioId,
+            filtro,
+            ct);
+
+        return Ok(resultado);
+    }
+
+    // GET /api/viajes/{viajeId}/gastos/{gastoId}
+    [HttpGet("{gastoId:guid}", Name = nameof(ObtenerPorId))]
+    [ProducesResponseType(typeof(GastoDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<GastoDto>> ObtenerPorId(
+        [FromRoute] Guid viajeId,
+        [FromRoute] Guid gastoId,
+        CancellationToken ct)
+    {
+        var usuarioId = ObtenerUsuarioActualId();
+
+        var gasto = await _gastoService.ObtenerPorIdAsync(
+            viajeId,
+            gastoId,
+            usuarioId,
+            ct);
+
+        return Ok(gasto);
+    }
+
+    // POST /api/viajes/{viajeId}/gastos
+    [HttpPost]
+    [ProducesResponseType(typeof(GastoDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<GastoDto>> Crear(
+        [FromRoute] Guid viajeId,
+        [FromBody] CrearGastoRequestDto request,
+        CancellationToken ct)
+    {
+        var usuarioId = ObtenerUsuarioActualId();
+
+        var gasto = await _gastoService.CrearAsync(
+            viajeId,
+            usuarioId,
+            request,
+            ct);
+
+        return CreatedAtAction(
+            nameof(ObtenerPorId),
+            new
+            {
+                viajeId,
+                gastoId = gasto.Id
+            },
+            gasto);
+    }
+
+    // PUT /api/viajes/{viajeId}/gastos/{gastoId}
+    [HttpPut("{gastoId:guid}")]
+    [ProducesResponseType(typeof(GastoDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<GastoDto>> Actualizar(
+        [FromRoute] Guid viajeId,
+        [FromRoute] Guid gastoId,
+        [FromBody] ActualizarGastoRequestDto request,
+        CancellationToken ct)
+    {
+        var usuarioId = ObtenerUsuarioActualId();
+
+        var gasto = await _gastoService.ActualizarAsync(
+            viajeId,
+            gastoId,
+            usuarioId,
+            request,
+            ct);
+
+        return Ok(gasto);
+    }
+
+    // DELETE /api/viajes/{viajeId}/gastos/{gastoId}
+    [HttpDelete("{gastoId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Eliminar(
+        [FromRoute] Guid viajeId,
+        [FromRoute] Guid gastoId,
+        CancellationToken ct)
+    {
+        var usuarioId = ObtenerUsuarioActualId();
+
+        await _gastoService.EliminarAsync(
+            viajeId,
+            gastoId,
+            usuarioId,
+            ct);
 
         return NoContent();
     }
 
-    [HttpPost("unirse")]
-    public async Task<ActionResult<ViajeResponseDto>> Unirse(
-        [FromBody] UnirseViajeDto dto,
-        CancellationToken cancellationToken)
-        => Ok(await _service.UnirseAsync(dto.CodigoInvitacion, _currentUser.UsuarioId, cancellationToken));
-
-    [HttpPost("{id:guid}/itinerario")]
-    [ProducesResponseType(typeof(IReadOnlyCollection<ItinerarioResponseDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<ActionResult<IReadOnlyCollection<ItinerarioResponseDto>>> GenerarItinerario(
-        Guid id,
-        CancellationToken cancellationToken)
-        => Ok(await _itinerarioService.GenerarAsync(id, _currentUser.UsuarioId, cancellationToken));
-
-    [HttpGet("{id:guid}/itinerario")]
-    [ProducesResponseType(typeof(IReadOnlyCollection<ItinerarioResponseDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<IReadOnlyCollection<ItinerarioResponseDto>>> ObtenerItinerario(
-        Guid id,
-        CancellationToken cancellationToken)
-        => Ok(await _itinerarioService.ObtenerAsync(id, _currentUser.UsuarioId, cancellationToken));
-
-    [HttpPost("{id:guid}/asistente")]
-    [EnableRateLimiting(AsistenteRateLimitPolicies.Viaje)]
-    [ProducesResponseType(typeof(AsistenteResponseDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<AsistenteResponseDto>> Asistente(
-        Guid id,
-        [FromBody] AsistenteRequestDto dto,
-        CancellationToken cancellationToken)
+    // GET /api/viajes/{viajeId}/gastos/balance?moneda=ARS
+    [HttpGet("balance")]
+    [ProducesResponseType(
+        typeof(BalanceGastosDto),
+        StatusCodes.Status200OK)]
+    public async Task<ActionResult<BalanceGastosDto>> ObtenerBalance(
+        [FromRoute] Guid viajeId,
+        [FromQuery] TipoMoneda moneda,
+        CancellationToken ct)
     {
-        if (!_asistenteOptions.Value.Enabled)
-        {
-            return NotFound(new { mensaje = "El asistente no está habilitado." });
-        }
+        var usuarioId = ObtenerUsuarioActualId();
 
-        var respuesta = await _asistenteService.ResponderAsync(
-            id,
-            dto,
-            _currentUser.UsuarioId,
-            cancellationToken);
+        var balance = await _gastoService.ObtenerBalanceAsync(
+            viajeId,
+            usuarioId,
+            moneda,
+            ct);
 
-        return Ok(respuesta);
+        return Ok(balance);
     }
 
-    [HttpPost("{id:guid}/asistente/aplicar")]
-    [EnableRateLimiting(AsistenteRateLimitPolicies.Viaje)]
-    [ProducesResponseType(typeof(IReadOnlyCollection<ItinerarioResponseDto>), StatusCodes.Status200OK)]
+    // POST /api/viajes/{viajeId}/gastos/liquidaciones
+    [HttpPost("liquidaciones")]
+    [ProducesResponseType(
+        typeof(LiquidacionDto),
+        StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<ActionResult<IReadOnlyCollection<ItinerarioResponseDto>>> AplicarAccionAsistente(
-        Guid id,
-        [FromBody] AplicarAccionAsistenteDto dto,
-        CancellationToken cancellationToken)
+    public async Task<ActionResult<LiquidacionDto>> Liquidar(
+        [FromRoute] Guid viajeId,
+        [FromBody] LiquidarGastosRequestDto request,
+        CancellationToken ct)
     {
-        if (!_asistenteOptions.Value.Enabled)
-        {
-            return NotFound(new { mensaje = "El asistente no está habilitado." });
-        }
+        var usuarioId = ObtenerUsuarioActualId();
 
-        var itinerarios = await _itinerarioService.AplicarAccionAsistenteAsync(
-            id,
-            dto,
-            _currentUser.UsuarioId,
-            cancellationToken);
+        var liquidacion = await _gastoService.LiquidarAsync(
+            viajeId,
+            usuarioId,
+            request,
+            ct);
 
-        return Ok(itinerarios);
+        return Ok(liquidacion);
     }
 
-    [HttpPost("{id:guid}/refinar")]
-    [ProducesResponseType(typeof(IReadOnlyCollection<ItinerarioResponseDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<ActionResult<IReadOnlyCollection<ItinerarioResponseDto>>> Refinar(
-        Guid id,
-        [FromBody] RefinamientoDto dto,
-        CancellationToken cancellationToken)
+    private Guid ObtenerUsuarioActualId()
     {
-        if (!string.IsNullOrWhiteSpace(dto.Texto))
+        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (!Guid.TryParse(claim, out var usuarioId))
         {
-            return Ok(await _itinerarioService.RefinarPorTextoAsync(
-                id, dto.Texto, dto.NumeroDia, _currentUser.UsuarioId, cancellationToken));
+            throw new UnauthorizedAccessException("No se pudo identificar al usuario autenticado.");
         }
 
-        return Ok(await _itinerarioService.RefinarAsync(
-            id, dto.Tipo, dto.NumeroDia, _currentUser.UsuarioId, cancellationToken));
+        return usuarioId;
     }
-
-    [HttpPost("{id:guid}/sugerencias-turnos-libres")]
-    [ProducesResponseType(typeof(IReadOnlyCollection<ItinerarioResponseDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<ActionResult<IReadOnlyCollection<ItinerarioResponseDto>>> SugerirTurnosLibres(
-        Guid id,
-        [FromBody] SugerenciasTurnoLibreDto dto,
-        CancellationToken cancellationToken)
-        => Ok(await _itinerarioService.SugerirTurnosLibresAsync(id, dto.NumeroDia, _currentUser.UsuarioId, cancellationToken));
 }
