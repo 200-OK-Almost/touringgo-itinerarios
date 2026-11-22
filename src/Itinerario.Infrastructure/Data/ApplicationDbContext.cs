@@ -20,6 +20,10 @@ public class ApplicationDbContext : DbContext
     public DbSet<ItinerarioEntity> Itinerarios => Set<ItinerarioEntity>();
     public DbSet<ParadaItinerario> ParadasItinerario => Set<ParadaItinerario>();
     public DbSet<ViajeDia> ViajeDias => Set<ViajeDia>();
+    public DbSet<Gasto> Gastos => Set<Gasto>();
+    public DbSet<DivisionGasto> DivisionesGasto => Set<DivisionGasto>();
+    public DbSet<Liquidacion> Liquidaciones => Set<Liquidacion>();
+    public DbSet<TransferenciaLiquidacion> TransferenciasLiquidacion => Set<TransferenciaLiquidacion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -31,6 +35,10 @@ public class ApplicationDbContext : DbContext
 
         modelBuilder.Entity<ItinerarioEntity>()
             .Property<uint>("xmin")
+            .IsRowVersion();
+
+        modelBuilder.Entity<Gasto>()
+            .Property<uint>(g => g.Version)
             .IsRowVersion();
 
         base.OnModelCreating(modelBuilder);
