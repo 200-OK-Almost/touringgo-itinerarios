@@ -1,0 +1,247 @@
+using System.Text.Json;
+using Itinerario.Application.Configuration;
+using Itinerario.Application.DTOs;
+using Itinerario.Application.Interfaces;
+using Itinerario.Application.Services;
+using Itinerario.Domain.Enums;
+using Itinerario.Domain.Exceptions;
+using Microsoft.Extensions.Options;
+
+namespace Itinerario.UnitTests.Services;
+
+public class MensajeLlmServiceTests
+{
+    [Fact]
+    public async Task GenerarAsync_Habilitado_DevuelveMensajeYConstruyePrompt()
+    {
+        var contexto = CrearContexto();
+        var cliente = new OllamaClientFalso(new MensajeLlmCrudo
+        {
+            Mensaje = "  Te recomiendo   este bar. "
+        });
+        var telemetria = new TelemetriaFalsa();
+        var service = CrearServicio(cliente, new AsistenteOptions
+        {
+            LlmGenerarMensaje = true
+        }, telemetria);
+
+        var mensaje = await service.GenerarAsync(contexto);
+
+        Assert.Equal("Te recomiendo este bar.", mensaje);
+        Assert.True(cliente.FueLlamado);
+        Assert.Contains(contexto.MensajeUsuario, cliente.Prompt);
+        Assert.Contains(contexto.Recomendaciones.Single().Nombre, cliente.Prompt);
+        Assert.Contains("No inventes lugares", cliente.Prompt);
+        Assert.Contains("No digas que aplicaste cambios", cliente.Prompt);
+        Assert.Contains("generation_llm", telemetria.Etapas);
+        Assert.Contains("llm_ok", telemetria.Resultados);
+    }
+
+    [Fact]
+    public async Task GenerarAsync_Deshabilitado_NoLlamaAlModelo()
+    {
+        var cliente = new OllamaClientFalso(new MensajeLlmCrudo { Mensaje = "Hola" });
+        var telemetria = new TelemetriaFalsa();
+        var service = CrearServicio(cliente, new AsistenteOptions
+        {
+            LlmGenerarMensaje = false
+        }, telemetria);
+
+        var mensaje = await service.GenerarAsync(CrearContexto());
+
+        Assert.Null(mensaje);
+        Assert.False(cliente.FueLlamado);
+        Assert.Empty(telemetria.Etapas);
+        Assert.Empty(telemetria.Resultados);
+    }
+
+    [Fact]
+    public async Task GenerarAsync_SinRecomendaciones_NoLlamaAlModelo()
+    {
+        var contexto = CrearContexto();
+        contexto.Recomendaciones = Array.Empty<RecomendacionLugarDto>();
+        var cliente = new OllamaClientFalso(new MensajeLlmCrudo { Mensaje = "Hola" });
+        var service = CrearServicio(cliente, new AsistenteOptions
+        {
+            LlmGenerarMensaje = true
+        });
+
+        var mensaje = await service.GenerarAsync(contexto);
+
+        Assert.Null(mensaje);
+        Assert.False(cliente.FueLlamado);
+    }
+
+    [Fact]
+    public async Task GenerarAsync_MensajeVacio_DevuelveNullYRegistraError()
+    {
+        var cliente = new OllamaClientFalso(new MensajeLlmCrudo { Mensaje = "   " });
+        var telemetria = new TelemetriaFalsa();
+        var service = CrearServicio(cliente, new AsistenteOptions
+        {
+            LlmGenerarMensaje = true
+        }, telemetria);
+
+        var mensaje = await service.GenerarAsync(CrearContexto());
+
+        Assert.Null(mensaje);
+        Assert.Contains("llm_error", telemetria.Resultados);
+    }
+
+    [Fact]
+    public async Task GenerarAsync_MensajeLargo_SeRecorta()
+    {
+        var cliente = new OllamaClientFalso(new MensajeLlmCrudo
+        {
+            Mensaje = new string('a', 600)
+        });
+        var service = CrearServicio(cliente, new AsistenteOptions
+        {
+            LlmGenerarMensaje = true
+        });
+
+        var mensaje = await service.GenerarAsync(CrearContexto());
+
+        Assert.NotNull(mensaje);
+        Assert.Equal(500, mensaje!.Length);
+    }
+
+    [Fact]
+    public async Task GenerarAsync_ServicioCaido_DevuelveNullYRegistraError()
+    {
+        var cliente = new OllamaClientFalso(
+            comportamiento: _ => throw new ServicioExternoNoDisponibleException("Ollama caído."));
+        var telemetria = new TelemetriaFalsa();
+        var service = CrearServicio(cliente, new AsistenteOptions
+        {
+            LlmGenerarMensaje = true
+        }, telemetria);
+
+        var mensaje = await service.GenerarAsync(CrearContexto());
+
+        Assert.Null(mensaje);
+        Assert.Contains("generation_llm", telemetria.Etapas);
+        Assert.Contains("llm_error", telemetria.Resultados);
+    }
+
+    [Fact]
+    public async Task GenerarAsync_JsonInvalido_DevuelveNullYRegistraError()
+    {
+        var cliente = new OllamaClientFalso(
+            comportamiento: _ => throw new JsonException("JSON inválido."));
+        var telemetria = new TelemetriaFalsa();
+        var service = CrearServicio(cliente, new AsistenteOptions
+        {
+            LlmGenerarMensaje = true
+        }, telemetria);
+
+        var mensaje = await service.GenerarAsync(CrearContexto());
+
+        Assert.Null(mensaje);
+        Assert.Contains("llm_error", telemetria.Resultados);
+    }
+
+    [Fact]
+    public async Task GenerarAsync_Timeout_DevuelveNullYRegistraTimeout()
+    {
+        var cliente = new OllamaClientFalso(
+            comportamiento: cancellationToken => Task.Delay(
+                TimeSpan.FromSeconds(30),
+                cancellationToken));
+        var telemetria = new TelemetriaFalsa();
+        var service = CrearServicio(cliente, new AsistenteOptions
+        {
+            LlmGenerarMensaje = true,
+            GenerationTimeoutSeconds = 1
+        }, telemetria);
+
+        var mensaje = await service.GenerarAsync(CrearContexto());
+
+        Assert.Null(mensaje);
+        Assert.Contains("llm_timeout", telemetria.Resultados);
+    }
+
+    [Fact]
+    public async Task GenerarAsync_CancelacionExterna_PropagaExcepcion()
+    {
+        var cliente = new OllamaClientFalso(
+            comportamiento: cancellationToken => Task.Delay(
+                Timeout.InfiniteTimeSpan,
+                cancellationToken));
+        var service = CrearServicio(cliente, new AsistenteOptions
+        {
+            LlmGenerarMensaje = true
+        });
+
+        using var cancellationTokenSource = new CancellationTokenSource();
+        cancellationTokenSource.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => service.GenerarAsync(CrearContexto(), cancellationTokenSource.Token));
+    }
+
+    private static MensajeLlmService CrearServicio(
+        IOllamaClient cliente,
+        AsistenteOptions options,
+        TelemetriaFalsa? telemetria = null)
+        => new(
+            cliente,
+            telemetria ?? new TelemetriaFalsa(),
+            Options.Create(options));
+
+    private static MensajeLlmContextoDto CrearContexto() => new()
+    {
+        ViajeId = Guid.NewGuid(),
+        MensajeUsuario = "Agregá un bar para la tarde",
+        Accion = TipoAccionAsistente.Agregar,
+        NumeroDia = 1,
+        Recomendaciones = new[]
+        {
+            new RecomendacionLugarDto
+            {
+                LugarId = Guid.NewGuid(),
+                Nombre = "Bar de la esquina",
+                Barrio = BarrioCaba.Palermo,
+                Latitud = -34.58m,
+                Longitud = -58.42m,
+                Categorias = new[] { "bares_vermu" },
+                Motivo = "Coincide con bares_vermu."
+            }
+        }
+    };
+
+    private sealed class OllamaClientFalso : IOllamaClient
+    {
+        private readonly Func<CancellationToken, Task>? _comportamiento;
+
+        public OllamaClientFalso(
+            MensajeLlmCrudo? respuesta = null,
+            Func<CancellationToken, Task>? comportamiento = null)
+        {
+            Respuesta = respuesta;
+            _comportamiento = comportamiento;
+        }
+
+        public MensajeLlmCrudo? Respuesta { get; }
+
+        public bool FueLlamado { get; private set; }
+
+        public string? Prompt { get; private set; }
+
+        public async Task<T> ChatJsonAsync<T>(string prompt, CancellationToken cancellationToken = default)
+        {
+            FueLlamado = true;
+            Prompt = prompt;
+
+            if (_comportamiento is not null)
+            {
+                await _comportamiento(cancellationToken);
+            }
+
+            return (T)(object)(Respuesta ?? new MensajeLlmCrudo());
+        }
+
+        public Task<string> ChatTextoAsync(string prompt, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+    }
+}

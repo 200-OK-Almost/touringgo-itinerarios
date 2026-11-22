@@ -31,7 +31,8 @@ public class MensajeLlmService : IMensajeLlmService
         MensajeLlmContextoDto contexto,
         CancellationToken cancellationToken = default)
     {
-        if (!_options.LlmGenerarMensaje || contexto.Recomendaciones.Count == 0)
+        if (!_options.LlmGenerarMensaje
+            || contexto.Recomendaciones is not { Count: > 0 })
         {
             return null;
         }
