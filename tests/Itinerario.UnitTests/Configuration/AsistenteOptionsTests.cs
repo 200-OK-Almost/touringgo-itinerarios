@@ -11,6 +11,8 @@ public class AsistenteOptionsTests
 
         Assert.Equal("Asistente", AsistenteOptions.SectionName);
         Assert.False(options.Enabled);
+        Assert.False(options.LlmEnabled);
+        Assert.False(options.LlmGenerarMensaje);
         Assert.Equal(12, options.TopK);
         Assert.Equal(3, options.MinResultados);
         Assert.Null(options.SimilitudMinima);
