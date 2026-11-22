@@ -5,6 +5,8 @@ public class AsistenteOptions
     public const string SectionName = "Asistente";
 
     public bool Enabled { get; set; }
+    public bool LlmEnabled { get; set; }
+    public bool LlmGenerarMensaje { get; set; }
     public int TopK { get; set; } = 12;
     public int MinResultados { get; set; } = 3;
     public double? SimilitudMinima { get; set; }

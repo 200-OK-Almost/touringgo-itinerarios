@@ -1,3 +1,4 @@
+using Itinerario.Application.Constants;
 using Itinerario.Application.DTOs;
 using Itinerario.Application.Interfaces;
 using Itinerario.Domain.Enums;
@@ -7,17 +8,6 @@ namespace Itinerario.Application.Services;
 
 public class InterpretacionService : IInterpretacionService
 {
-    private static readonly string[] CodigosValidos =
-    {
-        "cafe_especialidad",
-        "museos_galerias",
-        "parques_aire_libre",
-        "librerias_diseno",
-        "bares_vermu",
-        "gastronomia_clasica",
-        "cocteleria_autor"
-    };
-
     private readonly IOllamaClient _ollamaClient;
 
     public InterpretacionService(IOllamaClient ollamaClient)
@@ -84,7 +74,7 @@ public class InterpretacionService : IInterpretacionService
         => (categorias ?? new List<string>())
             .Where(c => !string.IsNullOrWhiteSpace(c))
             .Select(c => c.Trim())
-            .Select(c => CodigosValidos.FirstOrDefault(v => string.Equals(v, c, StringComparison.OrdinalIgnoreCase)))
+            .Select(c => CategoriasLugares.Codigos.FirstOrDefault(v => string.Equals(v, c, StringComparison.OrdinalIgnoreCase)))
             .Where(c => c is not null)
             .Cast<string>()
             .Distinct()
