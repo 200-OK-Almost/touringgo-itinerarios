@@ -2,7 +2,7 @@
 
 namespace Itinerario.Application.DTOs.Gastos
 {
-    public class GastoDtoCrearGastoRequestDto
+    public class CrearGastoRequestDto
     {
         public string Concepto { get; set; } = string.Empty;
         public decimal Monto { get; set; }

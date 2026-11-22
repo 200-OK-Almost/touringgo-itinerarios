@@ -6,6 +6,6 @@ namespace Itinerario.Application.DTOs.Gastos
     {
         public Guid ViajeId { get; set; }
         public TipoMoneda Moneda { get; set; }
-        public IReadOnlyCollection<BalanceParticipanteDto> Participantes { get; set; } = new List<BalanceParticipanteDto>();
+        public IReadOnlyCollection<BalanceParticipanteDto> Balances { get; set; } = new List<BalanceParticipanteDto>();
     }
 }
