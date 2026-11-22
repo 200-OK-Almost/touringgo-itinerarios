@@ -369,6 +369,18 @@ Si falla, se usa el mensaje determinista actual.
 | IDs o categorías inválidas | Se descartan o se usa el fallback. |
 | Cancelación del request | Se propaga; no se oculta. |
 
+## Calibración de similitud
+
+`Asistente:SimilitudMinima=0.45` se eligió con el benchmark de `touringgo-lugares` usando embeddings de consultas reales contra los top 12 lugares de Palermo.
+
+Resultado:
+
+- `0.60–0.65` descartaba casi todos los resultados de consultas libres;
+- `0.50` dejaba sin resultados consultas amplias;
+- `0.45` conserva resultados relevantes y permite que el fallback actúe cuando quedan menos de `MinResultados`.
+
+El benchmark completo y las consultas usadas están en `touringgo-lugares/docs/benchmark-busqueda-semantica.md`.
+
 ## Versión e itinerarios
 
 `Version` se obtiene de `xmin` del `Itinerario` y se expone en:
@@ -395,7 +407,7 @@ Todas las rutas que mutan paradas fuerzan el UPDATE del padre:
 | `Asistente:LlmGenerarMensaje` | `false` | Habilita generación del mensaje. |
 | `Asistente:TopK` | `12` | Cantidad máxima de lugares a recuperar. |
 | `Asistente:MinResultados` | `3` | Umbral para activar fallback. |
-| `Asistente:SimilitudMinima` | `null` | Sin umbral hasta calibrar. |
+| `Asistente:SimilitudMinima` | `0.45` | Calibrado con consultas reales en Lugares. |
 | `Asistente:RadioMetrosDefault` | `800` | Radio para consultas de cercanía. |
 | `Asistente:MaxMensajeCaracteres` | `1000` | Límite del mensaje de entrada. |
 | `Asistente:MaxHistorial` | `6` | Máximo de mensajes de historial. |
