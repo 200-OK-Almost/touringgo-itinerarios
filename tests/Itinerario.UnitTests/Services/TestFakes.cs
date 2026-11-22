@@ -222,6 +222,44 @@ internal sealed class OllamaClientFalso : IOllamaClient
         => Task.FromResult("Sugerencia de prueba");
 }
 
+internal sealed class IntencionLlmServiceFalso : IIntencionLlmService
+{
+    public IntencionLlmCruda? Respuesta { get; set; }
+
+    public bool FueLlamado { get; private set; }
+
+    public IntencionLlmContextoDto? Contexto { get; private set; }
+
+    public Task<IntencionLlmCruda?> InterpretarAsync(
+        IntencionLlmContextoDto contexto,
+        CancellationToken cancellationToken = default)
+    {
+        FueLlamado = true;
+        Contexto = contexto;
+
+        return Task.FromResult(Respuesta);
+    }
+}
+
+internal sealed class MensajeLlmServiceFalso : IMensajeLlmService
+{
+    public string? Respuesta { get; set; }
+
+    public bool FueLlamado { get; private set; }
+
+    public MensajeLlmContextoDto? Contexto { get; private set; }
+
+    public Task<string?> GenerarAsync(
+        MensajeLlmContextoDto contexto,
+        CancellationToken cancellationToken = default)
+    {
+        FueLlamado = true;
+        Contexto = contexto;
+
+        return Task.FromResult(Respuesta);
+    }
+}
+
 internal sealed class InterpretacionServiceFalso : IInterpretacionService
 {
     public Task<BosquejoViajeDto> InterpretarAsync(

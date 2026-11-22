@@ -15,6 +15,8 @@ public class AsistenteService : IAsistenteService
     private readonly IViajeRepository _viajeRepository;
     private readonly ILugaresClient _lugaresClient;
     private readonly IIntencionService _intencionService;
+    private readonly IIntencionLlmService _intencionLlmService;
+    private readonly IMensajeLlmService _mensajeLlmService;
     private readonly IAsistenteTelemetry _telemetry;
     private readonly AsistenteOptions _options;
 
@@ -22,12 +24,16 @@ public class AsistenteService : IAsistenteService
         IViajeRepository viajeRepository,
         ILugaresClient lugaresClient,
         IIntencionService intencionService,
+        IIntencionLlmService intencionLlmService,
+        IMensajeLlmService mensajeLlmService,
         IAsistenteTelemetry telemetry,
         IOptions<AsistenteOptions> options)
     {
         _viajeRepository = viajeRepository;
         _lugaresClient = lugaresClient;
         _intencionService = intencionService;
+        _intencionLlmService = intencionLlmService;
+        _mensajeLlmService = mensajeLlmService;
         _telemetry = telemetry;
         _options = options.Value;
     }
@@ -87,6 +93,32 @@ public class AsistenteService : IAsistenteService
             _options.RadioMetrosDefault);
 
         var puedeAplicar = viaje.EsAdministrador(usuarioIdSolicitante);
+
+        if (_options.LlmEnabled
+            && intencion.Aclaracion is null
+            && EsIntencionDebil(intencion))
+        {
+            var contexto = ConstruirContextoLlm(
+                viajeId,
+                mensaje,
+                itinerario?.NumeroDia ?? request.NumeroDia,
+                barrio,
+                categoriasViaje,
+                viaje,
+                paradasResolubles,
+                intencion);
+
+            var crudo = await _intencionLlmService.InterpretarAsync(
+                contexto,
+                cancellationToken);
+
+            var intencionLlm = IntencionLlmSanitizer.Sanitizar(crudo, contexto);
+
+            if (intencionLlm is not null)
+            {
+                intencion = intencionLlm;
+            }
+        }
 
         if (intencion.Aclaracion is not null)
         {
@@ -180,12 +212,36 @@ public class AsistenteService : IAsistenteService
 
         var accion = ConstruirAccion(intencion, recomendaciones, itinerario, puedeAplicar);
 
+        var mensajeRespuesta = ConstruirMensaje(
+            intencion,
+            recomendaciones.Count,
+            itinerario?.NumeroDia ?? request.NumeroDia);
+
+        if (_options.LlmGenerarMensaje && recomendaciones.Count > 0)
+        {
+            var contextoMensaje = new MensajeLlmContextoDto
+            {
+                ViajeId = viajeId,
+                MensajeUsuario = mensaje,
+                Accion = intencion.Accion,
+                ParadaObjetivo = intencion.ParadaObjetivo?.Nombre,
+                NumeroDia = itinerario?.NumeroDia ?? request.NumeroDia,
+                Recomendaciones = recomendaciones
+            };
+
+            var mensajeLlm = await _mensajeLlmService.GenerarAsync(
+                contextoMensaje,
+                cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(mensajeLlm))
+            {
+                mensajeRespuesta = mensajeLlm;
+            }
+        }
+
         var resultado = new AsistenteResponseDto
         {
-            Mensaje = ConstruirMensaje(
-                intencion,
-                recomendaciones.Count,
-                itinerario?.NumeroDia ?? request.NumeroDia),
+            Mensaje = mensajeRespuesta,
             PuedeAplicar = puedeAplicar,
             Recomendaciones = recomendaciones,
             Accion = accion,
@@ -204,6 +260,56 @@ public class AsistenteService : IAsistenteService
 
         return resultado;
     }
+
+    private static bool EsIntencionDebil(IntencionAsistenteDto intencion)
+    {
+        if (intencion.Aclaracion is not null)
+        {
+            return false;
+        }
+
+        if (intencion.Accion == TipoAccionAsistente.Reemplazar
+            && intencion.ParadaObjetivo is null)
+        {
+            return true;
+        }
+
+        return string.Equals(intencion.QuerySemantica, "lugar", StringComparison.Ordinal)
+            && intencion.Filtros.CategoriaCodigos.Count == 0
+            && intencion.Filtros.SoloAlAireLibre is null
+            && intencion.Filtros.SoloBajoTecho is null
+            && intencion.Filtros.AptoNinos is null
+            && intencion.Filtros.AccesibleMovilidadReducida is null
+            && string.IsNullOrWhiteSpace(intencion.Filtros.RestriccionDietaria)
+            && intencion.Filtros.Turno is null
+            && intencion.Filtros.NivelPrecioMaximo is null
+            && intencion.RadioMetros is null
+            && intencion.ParadaObjetivo is null;
+    }
+
+    private static IntencionLlmContextoDto ConstruirContextoLlm(
+        Guid viajeId,
+        string mensaje,
+        short? numeroDia,
+        BarrioCaba barrio,
+        IReadOnlyCollection<string> categoriasViaje,
+        Viaje viaje,
+        IReadOnlyCollection<ParadaResolubleDto> paradas,
+        IntencionAsistenteDto intencion)
+        => new()
+        {
+            ViajeId = viajeId,
+            Mensaje = mensaje,
+            NumeroDia = numeroDia,
+            Barrio = barrio,
+            NivelPresupuesto = viaje.NivelPresupuesto,
+            CategoriasViaje = categoriasViaje,
+            AptoNinos = intencion.Filtros.AptoNinos == true || RequiereAptoNinos(viaje),
+            AccesibleMovilidadReducida =
+                intencion.Filtros.AccesibleMovilidadReducida == true
+                || RequiereAccesibilidad(viaje),
+            Paradas = paradas
+        };
 
     private static (
         BarrioCaba Barrio,
