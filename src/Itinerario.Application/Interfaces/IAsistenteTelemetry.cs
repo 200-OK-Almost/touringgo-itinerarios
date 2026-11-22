@@ -1,7 +1,11 @@
+using System.Diagnostics;
+
 namespace Itinerario.Application.Interfaces;
 
 public interface IAsistenteTelemetry
 {
+    Activity? IniciarActividad(string nombre, Guid? viajeId = null);
+
     void RegistrarEtapa(string etapa, TimeSpan duracion, Guid? viajeId = null);
 
     void RegistrarResultado(string resultado, int cantidadRecomendaciones, Guid? viajeId = null);

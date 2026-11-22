@@ -68,6 +68,7 @@ public class ItinerarioServiceAplicarAccionTests
         Assert.Equal((short?)3, parada.MinutosAPieDesdeAnterior);
         Assert.Contains(itinerario, repo.Modificados);
         Assert.Equal(1, repo.Guardados);
+        Assert.Single(repo.ParadasAgregadas);
         Assert.Single(resultado);
     }
 

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Itinerario.Application;
 using Itinerario.Application.DTOs;
 using Itinerario.Application.Interfaces;
@@ -169,6 +170,9 @@ internal sealed class TelemetriaFalsa : IAsistenteTelemetry
     public List<string> Etapas { get; } = new();
 
     public List<string> Resultados { get; } = new();
+
+    public Activity? IniciarActividad(string nombre, Guid? viajeId = null)
+        => null;
 
     public void RegistrarEtapa(string etapa, TimeSpan duracion, Guid? viajeId = null)
         => Etapas.Add(etapa);

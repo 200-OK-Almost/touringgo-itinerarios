@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using Itinerario.Application.Configuration;
 using Itinerario.Infrastructure.Telemetry;
 using Microsoft.Extensions.Logging;
@@ -50,6 +52,137 @@ public class AsistenteTelemetryTests
         telemetry.RegistrarDetalle("mensaje sensible", Guid.NewGuid());
 
         Assert.Empty(logger.Entradas);
+    }
+
+    [Fact]
+    public void RegistrarEtapa_EmiteDuracionEnMilisegundos()
+    {
+        var telemetry = new AsistenteTelemetry(
+            new ListLogger<AsistenteTelemetry>(),
+            Options.Create(new AsistenteOptions()));
+
+        double? valor = null;
+        string? etapa = null;
+
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, meterListener) =>
+        {
+            if (instrument.Meter.Name == AsistenteMetrics.MeterName
+                && instrument.Name == "asistente.etapa.duracion")
+            {
+                meterListener.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<double>((_, measurement, tags, _) =>
+        {
+            valor = measurement;
+
+            foreach (var tag in tags)
+            {
+                if (tag.Key == "etapa")
+                {
+                    etapa = tag.Value?.ToString();
+                }
+            }
+        });
+        listener.Start();
+
+        telemetry.RegistrarEtapa("retrieval", TimeSpan.FromMilliseconds(123), Guid.NewGuid());
+
+        Assert.Equal(123d, valor);
+        Assert.Equal("retrieval", etapa);
+    }
+
+    [Fact]
+    public void RegistrarResultado_EmiteResultadoYRecomendaciones()
+    {
+        var telemetry = new AsistenteTelemetry(
+            new ListLogger<AsistenteTelemetry>(),
+            Options.Create(new AsistenteOptions()));
+
+        var medidas = new List<(string Instrumento, long Valor)>();
+
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, meterListener) =>
+        {
+            if (instrument.Meter.Name == AsistenteMetrics.MeterName
+                && (instrument.Name == "asistente.resultados"
+                    || instrument.Name == "asistente.recomendaciones.cantidad"))
+            {
+                meterListener.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((instrument, measurement, _, _) =>
+        {
+            medidas.Add((instrument.Name, measurement));
+        });
+        listener.Start();
+
+        telemetry.RegistrarResultado("ok", 3, Guid.NewGuid());
+
+        Assert.Contains(("asistente.resultados", 1L), medidas);
+        Assert.Contains(("asistente.recomendaciones.cantidad", 3L), medidas);
+    }
+
+    [Fact]
+    public void IniciarActividad_EmiteActividadConViajeId()
+    {
+        var telemetry = new AsistenteTelemetry(
+            new ListLogger<AsistenteTelemetry>(),
+            Options.Create(new AsistenteOptions()));
+
+        Activity? iniciada = null;
+
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == AsistenteMetrics.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) =>
+                ActivitySamplingResult.AllData,
+            ActivityStarted = activity => iniciada = activity
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        var viajeId = Guid.NewGuid();
+        using var actividad = telemetry.IniciarActividad("asistente.consulta", viajeId);
+
+        Assert.NotNull(actividad);
+        Assert.Equal("asistente.consulta", iniciada?.DisplayName);
+        Assert.Equal(viajeId, iniciada?.GetTagItem("asistente.viaje_id"));
+    }
+
+    [Fact]
+    public void RegistrarRateLimitRechazado_EmiteContadorConPolitica()
+    {
+        long? valor = null;
+        string? politica = null;
+
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, meterListener) =>
+        {
+            if (instrument.Meter.Name == AsistenteMetrics.MeterName
+                && instrument.Name == "asistente.rate_limit.rechazos")
+            {
+                meterListener.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((_, measurement, tags, _) =>
+        {
+            valor = measurement;
+
+            foreach (var tag in tags)
+            {
+                if (tag.Key == "politica")
+                {
+                    politica = tag.Value?.ToString();
+                }
+            }
+        });
+        listener.Start();
+
+        AsistenteMetrics.RegistrarRateLimitRechazado("asistente-viaje");
+
+        Assert.Equal(1L, valor);
+        Assert.Equal("asistente-viaje", politica);
     }
 
     [Fact]

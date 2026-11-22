@@ -1,9 +1,8 @@
-# Asistente RAG — Fases 0 a 3
+# Asistente RAG — Fases 0 a 4
 
 El asistente tiene implementado el corte vertical completo sin streaming:
 
 - contratos, configuración y endpoint de capacidades;
-- rate limiting y telemetría;
 - recuperación de lugares desde Lugares;
 - recomendaciones deterministas;
 - detección de intención por reglas;
@@ -13,9 +12,14 @@ El asistente tiene implementado el corte vertical completo sin streaming:
 - propuesta de acción;
 - aplicación de acciones con concurrencia por `xmin`;
 - Ollama opcional para intención y generación de mensaje;
-- fallback total al flujo determinista.
+- fallback total al flujo determinista;
+- rate limiting distribuido con Redis y fallback local;
+- métricas y trazas;
+- pruebas de concurrencia con Postgres real;
+- validaciones de payload;
+- smoke y carga E2E.
 
-El frontend consume los mismos contratos de Fase 2. No requiere cambios por la Fase 3.
+El frontend consume los mismos contratos de Fase 2. No requiere cambios por las fases 3 y 4.
 
 ## Endpoints
 
@@ -26,7 +30,7 @@ GET /api/viajes/asistente/capacidades
 Authorization: Bearer <jwt>
 ```
 
-Devuelve si el asistente está habilitado y los límites configurados.
+Devuelve si el asistente está habilitado, los límites y la configuración de rate limiting.
 
 ### Consulta
 
@@ -96,7 +100,8 @@ Reglas:
 - si el asistente está deshabilitado, responde `404`;
 - si la búsqueda semántica falla o devuelve pocos resultados, usa el catálogo filtrado y devuelve `advertencia`;
 - no aplica cambios en esta llamada;
-- `accion` solo se completa si el usuario es administrador, hay una recomendación, el itinerario tiene `version` y la intención es `Agregar` o `Reemplazar`.
+- `accion` solo se completa si el usuario es administrador, hay una recomendación, el itinerario tiene `version` y la intención es `Agregar` o `Reemplazar`;
+- el request acepta como máximo **32 KB**.
 
 ### Aplicar acción
 
@@ -134,7 +139,8 @@ Reglas:
 - si el turno está ocupado o el lugar no es compatible → `409`/`400`;
 - `AgregarParada` calcula turno libre, orden, hora, distancia, cuadras y minutos;
 - `ReemplazarParada` conserva turno y orden, y recalcula métricas;
-- el bump de `FechaActualizacion` y la mutación se guardan en el mismo `SaveChanges`.
+- el bump de `FechaActualizacion` y la mutación se guardan en el mismo `SaveChanges`;
+- el request acepta como máximo **32 KB**.
 
 ## Flujo de consulta
 
@@ -144,14 +150,14 @@ Reglas:
 4. Interpretar la intención con reglas.
 5. Detectar si la intención es débil.
 6. Si `Asistente:LlmEnabled=true` y la intención es débil, consultar Ollama.
-7. Sanees la salida del LLM y usarla solo si es válida.
+7. Sanear la salida del LLM y usarla solo si es válida.
 8. Si hay aclaración, responder sin consultar Lugares.
 9. Construir la búsqueda semántica con query limpia y filtros combinados.
 10. Consultar Lugares.
 11. Si hay pocos resultados, usar `BuscarAsync` como fallback.
 12. Mapear recomendaciones y construir `Accion` si corresponde.
 13. Si `Asistente:LlmGenerarMensaje=true`, generar el mensaje.
-14. Registrar telemetría y devolver.
+14. Registrar métricas, trazas y telemetría.
 
 ## Intención determinista
 
@@ -369,6 +375,136 @@ Si falla, se usa el mensaje determinista actual.
 | IDs o categorías inválidas | Se descartan o se usa el fallback. |
 | Cancelación del request | Se propaga; no se oculta. |
 
+## Calibración de similitud
+
+`Asistente:SimilitudMinima=0.45` se eligió con el benchmark de `touringgo-lugares` usando embeddings de consultas reales contra los top 12 lugares de Palermo.
+
+Resultado:
+
+- `0.60–0.65` descartaba casi todos los resultados de consultas libres;
+- `0.50` dejaba sin resultados consultas amplias;
+- `0.45` conserva resultados relevantes y permite que el fallback actúe cuando quedan menos de `MinResultados`.
+
+El benchmark completo y las consultas usadas están en `touringgo-lugares/docs/benchmark-busqueda-semantica.md`.
+
+## Rate limiting distribuido
+
+El rate limiting se aplica con `[AsistenteRateLimit]` en:
+
+- `asistente-usuario`: capacidades;
+- `asistente-viaje`: consulta y aplicar.
+
+Store:
+
+- `RedisAsistenteRateLimitStore`;
+- script Lua atómico con `INCR` + `PEXPIRE`;
+- ventana fija por usuario y por viaje;
+- fallback en memoria si Redis no está configurado o falla.
+
+Configuración:
+
+```yaml
+Asistente__RateLimit__RedisConnectionString: "redis:6379,abortConnect=false"
+```
+
+Al superar el límite:
+
+```http
+HTTP/1.1 429 Too Many Requests
+Retry-After: 60
+Content-Type: application/json
+
+{ "mensaje": "Demasiadas consultas al asistente. Intentá de nuevo en unos segundos." }
+```
+
+Si Redis cae, el fallback es por instancia. Para garantía distribuida, Redis debe estar healthy.
+
+## Métricas y trazas
+
+`AsistenteMetrics` expone:
+
+- Meter: `TouringGo.Itinerario.Asistente`;
+- ActivitySource: `TouringGo.Itinerario.Asistente`.
+
+Métricas:
+
+| Instrumento | Tipo | Tags |
+|---|---|---|
+| `asistente.etapa.duracion` | histograma, ms | `etapa` |
+| `asistente.resultados` | contador | `resultado` |
+| `asistente.recomendaciones.cantidad` | histograma | `resultado` |
+| `asistente.rate_limit.rechazos` | contador | `politica` |
+
+Trazas:
+
+- `asistente.consulta`;
+- `asistente.retrieval`;
+- `asistente.intent_llm`;
+- `asistente.generation_llm`.
+
+Tags:
+
+- `asistente.viaje_id`;
+- `asistente.resultado`;
+- `asistente.recomendaciones`;
+- `asistente.fallo_semantico`.
+
+La instrumentación está lista para conectarse a OpenTelemetry. No se agrega un exporter en esta fase.
+
+## Concurrencia con Postgres real
+
+Tests de integración con Testcontainers:
+
+- container `postgres:16`;
+- migraciones reales;
+- dos administradores compitiendo por el mismo día;
+- versión vieja después de un cambio real;
+- cambio en día 1 no invalida día 2.
+
+Se ejecutan solo con:
+
+```powershell
+$env:RUN_POSTGRES_INTEGRATION_TESTS='1'
+dotnet test Itinerario.sln
+```
+
+La prueba encontró y corrigió un bug real: la nueva parada se agregaba a la colección trackeada y EF la marcaba como `Modified`. Ahora se registra con `IItinerarioRepository.AgregarParada` para que quede `Added`.
+
+## Seguridad y límites
+
+- Requests de consulta y aplicar limitados a **32 KB**.
+- `Mensaje`: obligatorio y máximo `Asistente:MaxMensajeCaracteres`.
+- `Historial`: máximo `Asistente:MaxHistorial`; roles `user`/`assistant`; contenido máximo 2000.
+- `NumeroDia`: entre 1 y 365.
+- `Tipo`: solo `AgregarParada` o `ReemplazarParada`.
+- `LugarId`: obligatorio.
+- `Version`: obligatoria, máximo 128.
+- `ParadaId`: obligatorio solo para reemplazo y prohibido para agregar.
+- `Turno`: solo nombres válidos de `Turno`.
+
+## Smoke y carga E2E
+
+En `touringgo-infraestructura`:
+
+```powershell
+.\scripts\smoke-asistente.ps1 -Aplicar
+.\scripts\load-asistente.ps1 -ViajeId "<ID>" -Requests 20 -Concurrency 5
+```
+
+El smoke cubre:
+
+- token de desarrollo;
+- capacidades;
+- creación de viaje e itinerario;
+- consulta;
+- aclaración;
+- aplicar recomendación.
+
+El load test reporta RPS, promedio, P95 y status HTTP. En la verificación local:
+
+- `20` requests, concurrencia `5`: `20 × 200`;
+- `50` requests, concurrencia `10`: `17 × 200` + `33 × 429`.
+
 ## Versión e itinerarios
 
 `Version` se obtiene de `xmin` del `Itinerario` y se expone en:
@@ -395,7 +531,7 @@ Todas las rutas que mutan paradas fuerzan el UPDATE del padre:
 | `Asistente:LlmGenerarMensaje` | `false` | Habilita generación del mensaje. |
 | `Asistente:TopK` | `12` | Cantidad máxima de lugares a recuperar. |
 | `Asistente:MinResultados` | `3` | Umbral para activar fallback. |
-| `Asistente:SimilitudMinima` | `null` | Sin umbral hasta calibrar. |
+| `Asistente:SimilitudMinima` | `0.45` | Calibrado con consultas reales en Lugares. |
 | `Asistente:RadioMetrosDefault` | `800` | Radio para consultas de cercanía. |
 | `Asistente:MaxMensajeCaracteres` | `1000` | Límite del mensaje de entrada. |
 | `Asistente:MaxHistorial` | `6` | Máximo de mensajes de historial. |
@@ -403,25 +539,9 @@ Todas las rutas que mutan paradas fuerzan el UPDATE del padre:
 | `Asistente:GenerationTimeoutSeconds` | `45` | Timeout de generación de mensaje. |
 | `Asistente:VerboseLogging` | `false` | Logs de detalle. |
 | `Asistente:RateLimit:*` | ver appsettings | Límites por usuario/viaje. |
+| `Asistente:RateLimit:RedisConnectionString` | `null` | Redis para rate limiting distribuido. |
 | `Ollama:BaseUrl` | `http://localhost:11434` | Endpoint compatible con OpenAI. |
 | `Ollama:Model` | `llama3.2` | Modelo a usar. |
-
-## Rate limiting
-
-- `asistente-usuario`: usado por el endpoint de capacidades.
-- `asistente-viaje`: usado por consulta y aplicar.
-
-Al superar el límite:
-
-```http
-HTTP/1.1 429 Too Many Requests
-Retry-After: 60
-Content-Type: application/json
-
-{ "mensaje": "Demasiadas consultas al asistente. Intentá de nuevo en unos segundos." }
-```
-
-El límite es por instancia. Para escalado horizontal habrá que usar un almacenamiento distribuido.
 
 ## Telemetría
 
@@ -442,6 +562,13 @@ dotnet build Itinerario.sln
 dotnet test Itinerario.sln
 ```
 
+Integración con Postgres:
+
+```powershell
+$env:RUN_POSTGRES_INTEGRATION_TESTS='1'
+dotnet test Itinerario.sln
+```
+
 Cobertura principal:
 
 - normalización y detección de acciones;
@@ -455,7 +582,13 @@ Cobertura principal:
 - prompt de intención y saneamiento;
 - timeout, JSON inválido y servicio caído;
 - reglas fuertes vs intención débil;
-- generación de mensaje y fallback determinista.
+- generación de mensaje y fallback determinista;
+- rate limiting distribuido y fallback local;
+- métricas y trazas;
+- concurrencia real con `xmin`;
+- validaciones de payload.
+
+Estado local: **305 tests** con Postgres/Docker; **302 + 3 omitidos** sin Docker.
 
 ## Limitaciones actuales
 
@@ -465,14 +598,19 @@ Cobertura principal:
 - Si dos paradas tienen el mismo nombre y solo cambia el turno, la resolución puede seguir siendo ambigua.
 - No hay `json_schema` estricto, streaming ni tool calling.
 - El historial no se persiste.
+- Sin Redis, el rate limiting degrada a memoria local por instancia.
+- La instrumentación de métricas/trazas no incluye exporter; se conecta vía OpenTelemetry.
 
-## Próxima fase
+## Estado de la fase
 
-Fase 4: endurecimiento.
+Fase 4 completa.
 
-- rate limiting distribuido;
-- pruebas de concurrencia con Postgres real;
+Incluye:
+
+- rate limiting distribuido con Redis;
+- concurrencia con Postgres real;
 - métricas y trazas;
 - calibración de similitud;
 - validaciones y límites de payload;
-- smoke y carga E2E.
+- smoke y carga E2E;
+- documentación.

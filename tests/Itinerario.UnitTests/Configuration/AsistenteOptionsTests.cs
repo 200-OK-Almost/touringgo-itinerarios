@@ -26,5 +26,6 @@ public class AsistenteOptionsTests
         Assert.Equal(40, options.RateLimit.PermitLimitPorViaje);
         Assert.Equal(60, options.RateLimit.WindowSeconds);
         Assert.Equal(0, options.RateLimit.QueueLimit);
+        Assert.Null(options.RateLimit.RedisConnectionString);
     }
 }
