@@ -117,6 +117,7 @@ public class ViajesController : ControllerBase
 
     [HttpPost("{id:guid}/asistente")]
     [AsistenteRateLimit(AsistenteRateLimitPolicies.Viaje)]
+    [RequestSizeLimit(32 * 1024)]
     [ProducesResponseType(typeof(AsistenteResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<AsistenteResponseDto>> Asistente(
@@ -140,6 +141,7 @@ public class ViajesController : ControllerBase
 
     [HttpPost("{id:guid}/asistente/aplicar")]
     [AsistenteRateLimit(AsistenteRateLimitPolicies.Viaje)]
+    [RequestSizeLimit(32 * 1024)]
     [ProducesResponseType(typeof(IReadOnlyCollection<ItinerarioResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
