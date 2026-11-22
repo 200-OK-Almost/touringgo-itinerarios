@@ -578,7 +578,7 @@ public class ItinerarioService : IItinerarioService
         var referencia = ObtenerReferencia(anterior, itinerario, viaje);
         var metricas = CalcularMetricas(lugar, referencia);
 
-        itinerario.Paradas.Add(new ParadaItinerario
+        var parada = new ParadaItinerario
         {
             Id = Guid.NewGuid(),
             ItinerarioId = itinerario.Id,
@@ -592,7 +592,10 @@ public class ItinerarioService : IItinerarioService
             MinutosAPieDesdeAnterior = metricas.Minutos,
             OrigenParada = OrigenParada.Ia,
             FechaCreacion = DateTimeOffset.UtcNow
-        });
+        };
+
+        _itinerarioRepository.AgregarParada(parada);
+        itinerario.Paradas.Add(parada);
     }
 
     private async Task ReemplazarParadaAsistenteAsync(
