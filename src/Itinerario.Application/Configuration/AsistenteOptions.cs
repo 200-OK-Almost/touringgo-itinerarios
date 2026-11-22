@@ -25,4 +25,5 @@ public class AsistenteRateLimitOptions
     public int PermitLimitPorViaje { get; set; } = 40;
     public int WindowSeconds { get; set; } = 60;
     public int QueueLimit { get; set; }
+    public string? RedisConnectionString { get; set; }
 }
