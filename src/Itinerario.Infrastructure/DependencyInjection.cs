@@ -22,6 +22,7 @@ public static class DependencyInjection
         services.AddScoped<IViajeRepository, ViajeRepository>();
         services.AddScoped<IItinerarioRepository, ItinerarioRepository>();
         services.AddScoped<IAsistenteTelemetry, AsistenteTelemetry>();
+        services.AddScoped<IGastosRepository, GastosRepository>();
 
         services.AddHttpClient<ILugaresClient, LugaresClient>(client =>
         {

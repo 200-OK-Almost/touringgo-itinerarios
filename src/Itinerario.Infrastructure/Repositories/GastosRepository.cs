@@ -5,7 +5,7 @@ using Itinerario.Domain.Enums;
 using Itinerario.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
-public sealed class GastosRepository : IGastosRepository
+public class GastosRepository : IGastosRepository
 {
     private readonly ApplicationDbContext _context;
 
@@ -187,7 +187,7 @@ public sealed class GastosRepository : IGastosRepository
     }
 
     private static async Task<HashSet<TSource>> ToHashSetAsync<TSource>(
-        this IQueryable<TSource> source,
+        IQueryable<TSource> source,
         IEqualityComparer<TSource>? comparer = null,
         CancellationToken cancellationToken = default)
     {

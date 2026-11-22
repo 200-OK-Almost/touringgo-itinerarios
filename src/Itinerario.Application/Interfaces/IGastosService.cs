@@ -2,7 +2,7 @@
 using Itinerario.Application.DTOs.Gastos;
 using Itinerario.Domain.Enums;
 
-public interface IGastoService
+public interface IGastosService
 {
     Task<GastoDto> CrearAsync(
         Guid viajeId,

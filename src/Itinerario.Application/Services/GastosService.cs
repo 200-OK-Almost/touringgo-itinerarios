@@ -4,11 +4,11 @@ using Itinerario.Domain.Entities;
 using Itinerario.Domain.Enums;
 using Itinerario.Domain.Exceptions;
 
-public sealed class GastoService : IGastoService
+public class GastosService : IGastosService
 {
     private readonly IGastosRepository _gastosRepository;
 
-    public GastoService(IGastosRepository gastosRepository)
+    public GastosService(IGastosRepository gastosRepository)
     {
         _gastosRepository = gastosRepository;
     }
