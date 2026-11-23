@@ -97,6 +97,18 @@ public class ViajesController : ControllerBase
         CancellationToken cancellationToken)
         => Ok(await _service.UnirseAsync(dto.CodigoInvitacion, _currentUser.UsuarioId, cancellationToken));
 
+    [HttpGet("{id:guid}/miembros")]
+    public async Task<ActionResult<MiembroViajeDto>> ObtenerMiembros(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        return Ok(
+            await _service.ObtenerMiembrosViaje(
+                id, 
+                _currentUser.UsuarioId, 
+                cancellationToken));
+    }
+
     [HttpPost("{id:guid}/itinerario")]
     [ProducesResponseType(typeof(IReadOnlyCollection<ItinerarioResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

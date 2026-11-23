@@ -238,4 +238,11 @@ public class ViajeRepository : IViajeRepository
         => ex.InnerException is PostgresException postgres
             && postgres.SqlState == PostgresErrorCodes.UniqueViolation
             && postgres.ConstraintName == "IX_viajes_codigo_invitacion";
+
+    public async Task<ICollection<MiembroViaje>> ObtenerMiembrosDeViajeAsync(Guid viajeId)
+    {
+        return await _context.MiembrosViaje
+            .Where(m => m.ViajeId == viajeId)
+            .ToListAsync();
+    }
 }

@@ -1,9 +1,10 @@
-using System.Security.Cryptography;
 using Itinerario.Application.DTOs;
 using Itinerario.Application.Interfaces;
 using Itinerario.Domain.Entities;
 using Itinerario.Domain.Enums;
 using Itinerario.Domain.Exceptions;
+using System.Security.Cryptography;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Itinerario.Application.Services;
 
@@ -18,11 +19,13 @@ public class ViajeService : IViajeService
 
     private readonly IViajeRepository _repository;
     private readonly ILugaresClient _lugaresClient;
+    private readonly IUsuariosClient _usuariosClient;
 
-    public ViajeService(IViajeRepository repository, ILugaresClient lugaresClient)
+    public ViajeService(IViajeRepository repository, ILugaresClient lugaresClient, IUsuariosClient usuariosClient)
     {
         _repository = repository;
         _lugaresClient = lugaresClient;
+        _usuariosClient = usuariosClient;
     }
 
     public async Task<ViajeResponseDto> CrearAsync(ViajeCreateDto dto, Guid creadoPorUsuarioId, CancellationToken cancellationToken = default)
@@ -176,6 +179,42 @@ public class ViajeService : IViajeService
         }
 
         throw new InvalidOperationException("No se pudo generar un código de invitación único.");
+    }
+
+    public async Task<ICollection<MiembroViajeDto>> ObtenerMiembrosViaje(
+        Guid viajeId,
+        Guid usuarioId,
+        CancellationToken cancellationToken = default)
+    {
+        var viaje = await ObtenerEntidadAsync(viajeId, cancellationToken);
+
+        if (!viaje.EsMiembro(usuarioId))
+        {
+            throw new AccesoDenegadoException(
+                $"Solo un miembro del viaje puede obtener la información de otros miembros");
+        }
+        var miembros = await _repository.ObtenerMiembrosDeViajeAsync(viajeId);
+
+        var usuarioInfo = await _usuariosClient.ObtenerResumenesAsync(
+            miembros.Select(m => m.UsuarioId),
+            cancellationToken);
+
+        var usuarioInfoPorId = usuarioInfo.ToDictionary(p => p.Id);
+
+        var resultado = miembros.Select(m =>
+        {
+            usuarioInfoPorId.TryGetValue(m.UsuarioId, out var perfil);
+
+            return new MiembroViajeDto
+            {
+                UsuarioId = m.UsuarioId,
+                Nombre = perfil?.Nombre ?? "Usuario desconocido",
+                FotoUrl = perfil?.FotoUrl,
+                Rol = m.Rol,
+                FechaIncorporacion = m.FechaIncorporacion
+            };
+        }).ToList();
+        return resultado;
     }
 
     private async Task CompletarCoordenadasHospedajeSiAplicaAsync(ViajeCreateDto dto, CancellationToken cancellationToken)

@@ -10,4 +10,8 @@ public interface IViajeService
     Task<ViajeResponseDto> ActualizarAsync(Guid id, ViajeUpdateDto dto, Guid usuarioIdSolicitante, CancellationToken cancellationToken = default);
     Task EliminarAsync(Guid id, Guid usuarioIdSolicitante, CancellationToken cancellationToken = default);
     Task<ViajeResponseDto> UnirseAsync(string codigoInvitacion, Guid usuarioId, CancellationToken cancellationToken = default);
+    Task<ICollection<MiembroViajeDto>> ObtenerMiembrosViaje(
+        Guid viajeId, 
+        Guid usuarioId,
+        CancellationToken cancellationToken = default);
 }

@@ -497,6 +497,11 @@ public class ItinerarioServiceTests
 
         public Task<int> GuardarCambiosAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(0);
+
+        public Task<ICollection<MiembroViaje>> ObtenerMiembrosDeViajeAsync(Guid viajeId)
+        {
+            throw new NotImplementedException();
+        }
     }
 
     private sealed class ItinerarioRepositoryFalso : IItinerarioRepository
@@ -540,6 +545,11 @@ public class ItinerarioServiceTests
         public Task<PerfilViajeroDto> ObtenerPerfilAsync(
             CancellationToken cancellationToken = default)
             => Task.FromResult(new PerfilViajeroDto());
+
+        public Task<List<UsuarioResumenDto>> ObtenerResumenesAsync(IEnumerable<Guid> usuariosIds, CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
     }
 
     private sealed class OllamaClientFalso : IOllamaClient

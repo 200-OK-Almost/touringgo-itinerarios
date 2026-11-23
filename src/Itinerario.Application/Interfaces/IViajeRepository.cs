@@ -16,5 +16,6 @@ public interface IViajeRepository
     void SincronizarDias(Viaje viaje, IReadOnlyCollection<ViajeDia> dias);
     void EstablecerParametrosFamilia(Viaje viaje, ParametrosFamilia? parametros);
     void Descartar(Viaje viaje);
+    Task<ICollection<MiembroViaje>> ObtenerMiembrosDeViajeAsync(Guid viajeId);
     Task<int> GuardarCambiosAsync(CancellationToken cancellationToken = default);
 }
