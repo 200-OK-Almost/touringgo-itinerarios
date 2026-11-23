@@ -475,6 +475,37 @@ public class AsistenteServiceTests
     }
 
     [Fact]
+    public async Task ResponderAsync_AgregarConTurnoOcupado_NoProponeAccion()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var itinerario = TestData.CrearItinerario(viaje, version: "v3");
+        var existente = TestData.CrearLugar("Cafe", "cafe_especialidad");
+        TestData.CrearParada(itinerario, existente.Id, Turno.Tarde, 1);
+        var bar = TestData.CrearLugar("Bar", "bares_vermu");
+
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = new[] { bar }
+        };
+        lugares.PorId[existente.Id] = existente;
+
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        var respuesta = await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Agrega un bar para la tarde",
+                NumeroDia = 1
+            },
+            admin);
+
+        Assert.Null(respuesta.Accion);
+        Assert.Single(respuesta.Recomendaciones);
+    }
+
+    [Fact]
     public async Task ResponderAsync_MiembroNoRecibeAccion()
     {
         var admin = Guid.NewGuid();
@@ -628,6 +659,8 @@ public class AsistenteServiceTests
         Assert.True(respuesta.PuedeAplicar);
         Assert.NotNull(respuesta.Aclaracion);
         Assert.Single(respuesta.Aclaracion!.Opciones);
+        Assert.Contains("No encontr", respuesta.Mensaje);
+        Assert.Contains("librer", respuesta.Mensaje);
         Assert.Empty(respuesta.Recomendaciones);
         Assert.Empty(lugares.Busquedas);
         Assert.Null(respuesta.Accion);

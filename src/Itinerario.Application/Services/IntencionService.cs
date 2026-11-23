@@ -267,7 +267,7 @@ public class IntencionService : IIntencionService
 
         return coincidencias.Count switch
         {
-            0 => CrearAclaracion(ordenadas),
+            0 => CrearAclaracion(ordenadas, string.Join(" ", tokens)),
             1 => Resolver(coincidencias[0]),
             _ => CrearAclaracion(coincidencias)
         };
@@ -590,11 +590,14 @@ public class IntencionService : IIntencionService
     };
 
     private static ResolucionParadaObjetivoDto CrearAclaracion(
-        IEnumerable<ParadaResolubleDto> paradas) => new()
+        IEnumerable<ParadaResolubleDto> paradas,
+        string? terminoBuscado = null) => new()
     {
         Aclaracion = new AclaracionDto
         {
-            Pregunta = "¿A cuál parada te referís?",
+            Pregunta = string.IsNullOrWhiteSpace(terminoBuscado)
+                ? "¿A cuál parada te referís?"
+                : $"No encontré \"{terminoBuscado.Trim()}\". ¿A cuál parada te referís?",
             Opciones = paradas
                 .Select(parada => new OpcionAclaracionDto
                 {

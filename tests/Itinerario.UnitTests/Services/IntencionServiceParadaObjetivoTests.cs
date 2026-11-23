@@ -92,7 +92,7 @@ public class IntencionServiceParadaObjetivoTests
 
         Assert.Null(resultado.Parada);
         Assert.NotNull(resultado.Aclaracion);
-        Assert.Equal("¿A cuál parada te referís?", resultado.Aclaracion!.Pregunta);
+        Assert.Contains("parada te refer", resultado.Aclaracion!.Pregunta);
         Assert.Equal(2, resultado.Aclaracion.Opciones.Count);
         Assert.Contains(
             resultado.Aclaracion.Opciones,
@@ -116,7 +116,9 @@ public class IntencionServiceParadaObjetivoTests
 
         Assert.Null(resultado.Parada);
         Assert.NotNull(resultado.Aclaracion);
-        Assert.Equal(2, resultado.Aclaracion!.Opciones.Count);
+        Assert.Contains("No encontr", resultado.Aclaracion!.Pregunta);
+        Assert.Contains("librer", resultado.Aclaracion.Pregunta);
+        Assert.Equal(2, resultado.Aclaracion.Opciones.Count);
     }
 
     [Fact]

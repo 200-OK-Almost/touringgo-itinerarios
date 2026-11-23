@@ -537,6 +537,13 @@ public class AsistenteService : IAsistenteService
             return null;
         }
 
+        if (intencion.Accion == TipoAccionAsistente.Agregar
+            && intencion.Filtros.Turno is { } turno
+            && itinerario.Paradas.Any(parada => parada.Turno == turno))
+        {
+            return null;
+        }
+
         return new AccionPropuestaDto
         {
             Tipo = intencion.Accion == TipoAccionAsistente.Agregar
