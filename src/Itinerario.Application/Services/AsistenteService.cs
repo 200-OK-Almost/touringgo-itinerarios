@@ -95,11 +95,12 @@ public class AsistenteService : IAsistenteService
             })
             .ToList();
 
+        var sinSenal = !_intencionService.TieneSenalDeViaje(mensaje);
         var intencion = InterpretarConHistorial(
             mensaje,
             request.Historial,
-            paradasResolubles);
-        var sinSenal = !_intencionService.TieneSenalDeViaje(mensaje);
+            paradasResolubles,
+            sinSenal);
         var barrioBusqueda = intencion.Barrio ?? barrio;
 
         var puedeAplicar = viaje.EsAdministrador(usuarioIdSolicitante);
@@ -302,7 +303,7 @@ public class AsistenteService : IAsistenteService
         var accion = ConstruirAccion(intencion, recomendaciones, itinerario, puedeAplicar);
 
         var mensajeRespuesta = sinSenal
-            ? "No pude interpretar tu pedido. Contame qué tipo de lugar buscás: café, museo, bar, parque o restaurante."
+            ? ConstruirMensajeSinSenal(mensaje)
             : ConstruirMensaje(
                 intencion,
                 recomendaciones.Count,
@@ -373,14 +374,15 @@ public class AsistenteService : IAsistenteService
     private IntencionAsistenteDto InterpretarConHistorial(
         string mensaje,
         IReadOnlyCollection<MensajeHistorialDto>? historial,
-        IReadOnlyCollection<ParadaResolubleDto> paradas)
+        IReadOnlyCollection<ParadaResolubleDto> paradas,
+        bool sinSenal)
     {
         var intencion = _intencionService.Interpretar(
             mensaje,
             paradas,
             _options.RadioMetrosDefault);
 
-        if (historial is not { Count: > 0 })
+        if (sinSenal || historial is not { Count: > 0 })
         {
             return intencion;
         }
@@ -754,6 +756,23 @@ public class AsistenteService : IAsistenteService
                 : null,
             Version = itinerario.Version
         };
+    }
+
+    private static string ConstruirMensajeSinSenal(string mensaje)
+    {
+        if (mensaje.Contains("gracias", StringComparison.OrdinalIgnoreCase))
+        {
+            return "De nada. Si querés, puedo ayudarte a buscar otro lugar.";
+        }
+
+        if (mensaje.Contains("hola", StringComparison.OrdinalIgnoreCase)
+            || mensaje.Contains("buenas", StringComparison.OrdinalIgnoreCase)
+            || mensaje.Contains("buen dia", StringComparison.OrdinalIgnoreCase))
+        {
+            return "¡Hola! Contame qué tipo de lugar querés buscar.";
+        }
+
+        return "No pude interpretar tu pedido. Contame qué tipo de lugar buscás: café, museo, bar, parque o restaurante.";
     }
 
     private static string ConstruirMensaje(

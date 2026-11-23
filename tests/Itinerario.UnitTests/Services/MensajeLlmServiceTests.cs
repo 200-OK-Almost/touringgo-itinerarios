@@ -157,6 +157,35 @@ public class MensajeLlmServiceTests
     }
 
     [Fact]
+    public async Task GenerarAsync_SinSenal_NoMencionaCategoriasNiResultados()
+    {
+        var contexto = CrearContexto();
+        contexto.Recomendaciones = Array.Empty<RecomendacionLugarDto>();
+        contexto.SinSenal = true;
+        contexto.Barrio = BarrioCaba.PuertoMadero;
+        contexto.Filtros = new FiltrosIntencionDto
+        {
+            CategoriaCodigos = new[] { "bares_vermu" }
+        };
+        var cliente = new OllamaClientFalso(new MensajeLlmCrudo
+        {
+            Mensaje = "De nada. Si querés, puedo ayudarte a buscar otro lugar."
+        });
+        var service = CrearServicio(cliente, new AsistenteOptions
+        {
+            LlmGenerarMensaje = true
+        });
+
+        var mensaje = await service.GenerarAsync(contexto);
+
+        Assert.NotNull(mensaje);
+        Assert.Contains("El mensaje es un saludo, agradecimiento", cliente.Prompt);
+        Assert.Contains("(no aplica)", cliente.Prompt);
+        Assert.DoesNotContain("bares_vermu", cliente.Prompt);
+        Assert.DoesNotContain("No hay recomendaciones disponibles para", cliente.Prompt);
+    }
+
+    [Fact]
     public async Task GenerarAsync_MensajeVacio_DevuelveNullYRegistraError()
     {
         var cliente = new OllamaClientFalso(new MensajeLlmCrudo { Mensaje = "   " });

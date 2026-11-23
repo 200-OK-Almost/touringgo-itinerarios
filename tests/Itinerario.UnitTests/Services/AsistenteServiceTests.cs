@@ -1457,7 +1457,60 @@ public class AsistenteServiceTests
         Assert.Empty(lugares.Busquedas);
         Assert.Empty(respuesta.Recomendaciones);
         Assert.Null(respuesta.Accion);
-        Assert.Contains("No pude interpretar", respuesta.Mensaje);
+        Assert.Contains("¡Hola!", respuesta.Mensaje);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_GraciasConHistorial_NoHeredaCategoria()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = new[] { TestData.CrearLugar("Bar", "bares_vermu") }
+        };
+        var mensajeLlm = new MensajeLlmServiceFalso
+        {
+            Respuesta = "De nada. Si querés, puedo ayudarte a buscar otro lugar."
+        };
+        var service = CrearServicio(
+            viaje,
+            lugares,
+            new TelemetriaFalsa(),
+            new AsistenteOptions
+            {
+                TopK = 5,
+                MinResultados = 2,
+                RadioMetrosDefault = 800,
+                LlmGenerarMensaje = true
+            },
+            mensajeLlm: mensajeLlm);
+
+        var respuesta = await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "gracias",
+                NumeroDia = 1,
+                Historial = new[]
+                {
+                    new MensajeHistorialDto
+                    {
+                        Rol = "user",
+                        Contenido = "Quiero un bar en Puerto Madero"
+                    }
+                }
+            },
+            admin);
+
+        Assert.Empty(lugares.Busquedas);
+        Assert.True(mensajeLlm.FueLlamado);
+        Assert.NotNull(mensajeLlm.Contexto);
+        Assert.True(mensajeLlm.Contexto!.SinSenal);
+        Assert.Empty(mensajeLlm.Contexto.Filtros.CategoriaCodigos);
+        Assert.Equal(
+            "De nada. Si querés, puedo ayudarte a buscar otro lugar.",
+            respuesta.Mensaje);
     }
 
     [Fact]

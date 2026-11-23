@@ -114,7 +114,15 @@ public class MensajeLlmService : IMensajeLlmService
                     $"- {recomendacion.Nombre} | {string.Join(", ", recomendacion.Categorias)} | {recomendacion.Motivo}"))
             : "- (sin recomendaciones)";
 
-        var instrucciones = hayRecomendaciones
+        var instrucciones = contexto.SinSenal
+            ? """
+              El mensaje es un saludo, agradecimiento o texto sin intención de búsqueda.
+              Respondé de forma breve y amable.
+              No hables de resultados, categorías, barrios ni recomendaciones.
+              No menciones búsquedas anteriores.
+              Si corresponde, ofrecé ayuda para buscar un lugar.
+              """
+            : hayRecomendaciones
             ? contexto.BusquedaAmpliada
                 ? $"""
                   Usá solo las recomendaciones listadas.
@@ -170,11 +178,11 @@ public class MensajeLlmService : IMensajeLlmService
 
             Contexto:
             - Día: {{numeroDia}}
-            - Barrio: {{barrio}}
+            - Barrio: {{(contexto.SinSenal ? "(no aplica)" : barrio)}}
             - Acción: {{contexto.Accion}}
             - Parada objetivo: {{paradaObjetivo}}
-            - Categorías: {{categorias}}
-            - Filtros: {{filtros}}
+            - Categorías: {{(contexto.SinSenal ? "(no aplica)" : categorias)}}
+            - Filtros: {{(contexto.SinSenal ? "(no aplica)" : filtros)}}
             - Búsqueda ampliada: {{busquedaAmpliada}}
             - Sin resultados en barrio: {{sinResultadosEnBarrio}}
 
