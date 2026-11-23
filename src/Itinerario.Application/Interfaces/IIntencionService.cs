@@ -7,6 +7,8 @@ public interface IIntencionService
 {
     string Normalizar(string? texto);
 
+    bool TieneSenalDeViaje(string? mensaje);
+
     TipoAccionAsistente DetectarAccion(string? mensaje);
 
     ResolucionParadaObjetivoDto ResolverParadaObjetivo(

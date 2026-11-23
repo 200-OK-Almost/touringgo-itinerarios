@@ -124,7 +124,7 @@ public class AsistenteServiceTests
 
         var respuesta = await service.ResponderAsync(
             viaje.Id,
-            new AsistenteRequestDto { Mensaje = "algo para hacer" },
+            new AsistenteRequestDto { Mensaje = "algo tranquilo" },
             admin);
 
         Assert.Equal(2, respuesta.Recomendaciones.Count);
@@ -797,7 +797,7 @@ public class AsistenteServiceTests
             viaje.Id,
             new AsistenteRequestDto
             {
-                Mensaje = "Quiero algo",
+                Mensaje = "Quiero algo romántico",
                 NumeroDia = 1
             },
             admin);
@@ -892,14 +892,136 @@ public class AsistenteServiceTests
             viaje.Id,
             new AsistenteRequestDto
             {
-                Mensaje = "Quiero algo",
+                Mensaje = "Quiero algo romántico",
                 NumeroDia = 1
             },
             admin);
 
         Assert.True(intencionLlm.FueLlamado);
         var busqueda = Assert.Single(lugares.Busquedas);
-        Assert.Equal("lugar", busqueda.Query);
+        Assert.Equal("romantico", busqueda.Query);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_MensajeSinSenal_NoBuscaYUsaLlmSinRecomendaciones()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = new[] { TestData.CrearLugar() }
+        };
+        var telemetria = new TelemetriaFalsa();
+        var mensajeLlm = new MensajeLlmServiceFalso
+        {
+            Respuesta = "No entendí tu pedido. ¿Qué tipo de lugar buscás?"
+        };
+        var service = CrearServicio(
+            viaje,
+            lugares,
+            telemetria,
+            new AsistenteOptions
+            {
+                TopK = 5,
+                MinResultados = 2,
+                RadioMetrosDefault = 800,
+                LlmGenerarMensaje = true
+            },
+            mensajeLlm: mensajeLlm);
+
+        var respuesta = await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "asdf qwerty",
+                NumeroDia = 1
+            },
+            admin);
+
+        Assert.Empty(lugares.Busquedas);
+        Assert.True(mensajeLlm.FueLlamado);
+        Assert.NotNull(mensajeLlm.Contexto);
+        Assert.True(mensajeLlm.Contexto!.SinSenal);
+        Assert.Empty(mensajeLlm.Contexto.Recomendaciones);
+        Assert.Empty(respuesta.Recomendaciones);
+        Assert.Null(respuesta.Accion);
+        Assert.Null(respuesta.Advertencia);
+        Assert.Equal(
+            "No entendí tu pedido. ¿Qué tipo de lugar buscás?",
+            respuesta.Mensaje);
+        Assert.Contains("sin_senal", telemetria.Resultados);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_MensajeSinSenalSinLlm_DevuelveMensajeDeterminista()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = new[] { TestData.CrearLugar() }
+        };
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        var respuesta = await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "hola",
+                NumeroDia = 1
+            },
+            admin);
+
+        Assert.Empty(lugares.Busquedas);
+        Assert.Empty(respuesta.Recomendaciones);
+        Assert.Null(respuesta.Accion);
+        Assert.Contains("No pude interpretar", respuesta.Mensaje);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_SinResultados_UsaLlmSinRecomendaciones()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = Array.Empty<LugarCandidatoDto>(),
+            ResultadoCatalogo = Array.Empty<LugarCandidatoDto>()
+        };
+        var mensajeLlm = new MensajeLlmServiceFalso
+        {
+            Respuesta = "No encontré opciones. ¿Querés probar con otra categoría?"
+        };
+        var service = CrearServicio(
+            viaje,
+            lugares,
+            new TelemetriaFalsa(),
+            new AsistenteOptions
+            {
+                TopK = 5,
+                MinResultados = 2,
+                RadioMetrosDefault = 800,
+                LlmGenerarMensaje = true
+            },
+            mensajeLlm: mensajeLlm);
+
+        var respuesta = await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "café",
+                NumeroDia = 1
+            },
+            admin);
+
+        Assert.True(mensajeLlm.FueLlamado);
+        Assert.NotNull(mensajeLlm.Contexto);
+        Assert.Empty(mensajeLlm.Contexto!.Recomendaciones);
+        Assert.False(mensajeLlm.Contexto.SinSenal);
+        Assert.Empty(respuesta.Recomendaciones);
+        Assert.Equal(
+            "No encontré opciones. ¿Querés probar con otra categoría?",
+            respuesta.Mensaje);
     }
 
     [Fact]

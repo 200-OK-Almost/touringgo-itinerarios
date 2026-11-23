@@ -99,10 +99,12 @@ public class AsistenteService : IAsistenteService
             mensaje,
             paradasResolubles,
             _options.RadioMetrosDefault);
+        var sinSenal = !_intencionService.TieneSenalDeViaje(mensaje);
 
         var puedeAplicar = viaje.EsAdministrador(usuarioIdSolicitante);
 
-        if (_options.LlmEnabled
+        if (!sinSenal
+            && _options.LlmEnabled
             && intencion.Aclaracion is null
             && EsIntencionDebil(intencion))
         {
@@ -190,44 +192,49 @@ public class AsistenteService : IAsistenteService
             SimilitudMinima = _options.SimilitudMinima
         };
 
-        var retrieval = Stopwatch.StartNew();
         var falloSemantico = false;
+        var usoFallback = false;
         IReadOnlyCollection<LugarCandidatoDto> lugares = Array.Empty<LugarCandidatoDto>();
 
-        using (var actividadRetrieval = _telemetry.IniciarActividad("asistente.retrieval", viajeId))
+        if (!sinSenal)
         {
-            try
+            var retrieval = Stopwatch.StartNew();
+
+            using (var actividadRetrieval = _telemetry.IniciarActividad("asistente.retrieval", viajeId))
             {
-                lugares = await _lugaresClient.BuscarSemanticoAsync(busqueda, cancellationToken);
+                try
+                {
+                    lugares = await _lugaresClient.BuscarSemanticoAsync(busqueda, cancellationToken);
+                }
+                catch (ServicioExternoNoDisponibleException)
+                {
+                    falloSemantico = true;
+                }
+
+                actividadRetrieval?.SetTag("asistente.fallo_semantico", falloSemantico);
             }
-            catch (ServicioExternoNoDisponibleException)
+
+            _telemetry.RegistrarEtapa("retrieval", retrieval.Elapsed, viajeId);
+
+            usoFallback = falloSemantico;
+
+            if (lugares.Count < _options.MinResultados)
             {
-                falloSemantico = true;
-            }
+                var catalogo = await _lugaresClient.BuscarAsync(
+                    barrio,
+                    categoriasBusqueda,
+                    cancellationToken);
 
-            actividadRetrieval?.SetTag("asistente.fallo_semantico", falloSemantico);
-        }
+                var filtrados = FiltrarFallback(catalogo, busqueda, idsExcluidos)
+                    .Where(lugar => DentroDelRadio(lugar, busqueda))
+                    .Take(_options.TopK)
+                    .ToList();
 
-        _telemetry.RegistrarEtapa("retrieval", retrieval.Elapsed, viajeId);
-
-        var usoFallback = falloSemantico;
-
-        if (lugares.Count < _options.MinResultados)
-        {
-            var catalogo = await _lugaresClient.BuscarAsync(
-                barrio,
-                categoriasBusqueda,
-                cancellationToken);
-
-            var filtrados = FiltrarFallback(catalogo, busqueda, idsExcluidos)
-                .Where(lugar => DentroDelRadio(lugar, busqueda))
-                .Take(_options.TopK)
-                .ToList();
-
-            if (filtrados.Count > 0)
-            {
-                lugares = filtrados;
-                usoFallback = true;
+                if (filtrados.Count > 0)
+                {
+                    lugares = filtrados;
+                    usoFallback = true;
+                }
             }
         }
 
@@ -238,12 +245,14 @@ public class AsistenteService : IAsistenteService
 
         var accion = ConstruirAccion(intencion, recomendaciones, itinerario, puedeAplicar);
 
-        var mensajeRespuesta = ConstruirMensaje(
-            intencion,
-            recomendaciones.Count,
-            itinerario?.NumeroDia ?? request.NumeroDia);
+        var mensajeRespuesta = sinSenal
+            ? "No pude interpretar tu pedido. Contame qué tipo de lugar buscás: café, museo, bar, parque o restaurante."
+            : ConstruirMensaje(
+                intencion,
+                recomendaciones.Count,
+                itinerario?.NumeroDia ?? request.NumeroDia);
 
-        if (_options.LlmGenerarMensaje && recomendaciones.Count > 0)
+        if (_options.LlmGenerarMensaje)
         {
             var contextoMensaje = new MensajeLlmContextoDto
             {
@@ -252,7 +261,8 @@ public class AsistenteService : IAsistenteService
                 Accion = intencion.Accion,
                 ParadaObjetivo = intencion.ParadaObjetivo?.Nombre,
                 NumeroDia = itinerario?.NumeroDia ?? request.NumeroDia,
-                Recomendaciones = recomendaciones
+                Recomendaciones = recomendaciones,
+                SinSenal = sinSenal
             };
 
             var mensajeLlm = await _mensajeLlmService.GenerarAsync(
@@ -278,11 +288,13 @@ public class AsistenteService : IAsistenteService
                 : null
         };
 
-        var estado = recomendaciones.Count == 0
-            ? "sin_resultados"
-            : usoFallback
-                ? "fallback"
-                : "ok";
+        var estado = sinSenal
+            ? "sin_senal"
+            : recomendaciones.Count == 0
+                ? "sin_resultados"
+                : usoFallback
+                    ? "fallback"
+                    : "ok";
 
         actividad?.SetTag("asistente.resultado", estado);
         actividad?.SetTag("asistente.recomendaciones", recomendaciones.Count);
@@ -306,8 +318,7 @@ public class AsistenteService : IAsistenteService
             return true;
         }
 
-        return string.Equals(intencion.QuerySemantica, "lugar", StringComparison.Ordinal)
-            && intencion.Filtros.CategoriaCodigos.Count == 0
+        return intencion.Filtros.CategoriaCodigos.Count == 0
             && intencion.Filtros.SoloAlAireLibre is null
             && intencion.Filtros.SoloBajoTecho is null
             && intencion.Filtros.AptoNinos is null

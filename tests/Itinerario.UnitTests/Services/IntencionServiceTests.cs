@@ -19,6 +19,24 @@ public class IntencionServiceTests
     }
 
     [Theory]
+    [InlineData("asdf qwerty", false)]
+    [InlineData("hola", false)]
+    [InlineData("buenas noches", false)]
+    [InlineData("gracias", false)]
+    [InlineData("Quiero algo", false)]
+    [InlineData("Quiero un bar", true)]
+    [InlineData("Un lugar vegano", true)]
+    [InlineData("Algo romántico", true)]
+    [InlineData("Un lugar para niños", true)]
+    [InlineData("Recomendame un museo", true)]
+    public void TieneSenalDeViaje_DetectaSoloConsultasDelViaje(
+        string mensaje,
+        bool esperado)
+    {
+        Assert.Equal(esperado, _service.TieneSenalDeViaje(mensaje));
+    }
+
+    [Theory]
     [InlineData("Reemplazá el museo por un café")]
     [InlineData("Cambiá la primera parada por un parque")]
     [InlineData("Sustituí el bar por una librería")]
