@@ -85,6 +85,8 @@ internal sealed class ItinerarioRepositoryFalso : IItinerarioRepository
 
     public List<ParadaItinerario> ParadasAgregadas { get; } = new();
 
+    public List<ParadaItinerario> ParadasEliminadas { get; } = new();
+
     public List<ItinerarioEntity> Modificados { get; } = new();
 
     public Task<IReadOnlyCollection<ItinerarioEntity>> ObtenerPorViajeAsync(
@@ -118,6 +120,9 @@ internal sealed class ItinerarioRepositoryFalso : IItinerarioRepository
 
     public void AgregarParada(ParadaItinerario parada)
         => ParadasAgregadas.Add(parada);
+
+    public void EliminarParada(ParadaItinerario parada)
+        => ParadasEliminadas.Add(parada);
 
     public void MarcarModificado(ItinerarioEntity itinerario)
         => Modificados.Add(itinerario);

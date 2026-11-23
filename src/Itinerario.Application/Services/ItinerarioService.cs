@@ -377,6 +377,50 @@ public class ItinerarioService : IItinerarioService
         return itinerarios.Select(MapearRespuesta).ToList();
     }
 
+    public async Task<IReadOnlyCollection<ItinerarioResponseDto>> EliminarParadaAsync(
+        Guid viajeId,
+        short numeroDia,
+        Guid paradaId,
+        string version,
+        Guid usuarioIdSolicitante,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(version))
+        {
+            throw new ReglaDeNegocioException("La versión del itinerario es obligatoria.");
+        }
+
+        var (_, itinerarios) = await PrepararModificacionAsync(
+            viajeId, numeroDia, usuarioIdSolicitante, cancellationToken);
+
+        var itinerario = itinerarios.FirstOrDefault(i => i.NumeroDia == numeroDia)
+            ?? throw new NotFoundException(
+                $"El día {numeroDia} no existe en el itinerario.");
+
+        if (!string.Equals(itinerario.Version, version, StringComparison.Ordinal))
+        {
+            throw new ConflictoDeConcurrenciaException(
+                "El itinerario cambió desde que se cargó. Recargá y volvé a intentar.");
+        }
+
+        var parada = itinerario.Paradas.FirstOrDefault(p => p.Id == paradaId)
+            ?? throw new NotFoundException(
+                "No se encontró la parada indicada en el itinerario.");
+
+        _itinerarioRepository.EliminarParada(parada);
+        itinerario.Paradas.Remove(parada);
+        RecalcularOrdenYHorasDelTurno(itinerario, parada.Turno);
+
+        _itinerarioRepository.MarcarModificado(itinerario);
+        await _itinerarioRepository.GuardarCambiosAsync(cancellationToken);
+
+        var actualizados = await _itinerarioRepository.ObtenerPorViajeAsync(
+            viajeId,
+            cancellationToken);
+
+        return actualizados.Select(MapearRespuesta).ToList();
+    }
+
     public async Task<IReadOnlyCollection<ItinerarioResponseDto>> RefinarAsync(
         Guid viajeId,
         TipoRefinamiento tipo,
@@ -784,6 +828,24 @@ public class ItinerarioService : IItinerarioService
             (int)Math.Round(metros),
             (short)_geo.Cuadras(metros),
             (short)_geo.MinutosAPie(metros));
+    }
+
+    private static void RecalcularOrdenYHorasDelTurno(
+        ItinerarioEntity itinerario,
+        Turno turno)
+    {
+        ParadaItinerario? anterior = null;
+        short orden = 1;
+
+        foreach (var parada in itinerario.Paradas
+            .Where(p => p.Turno == turno)
+            .OrderBy(p => p.OrdenParada)
+            .ToList())
+        {
+            parada.OrdenParada = orden++;
+            parada.HoraInicio = CalcularHoraInicio(anterior, turno);
+            anterior = parada;
+        }
     }
 
     private static TimeOnly CalcularHoraInicio(
