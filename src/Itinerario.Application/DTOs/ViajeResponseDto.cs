@@ -23,6 +23,7 @@ public class ViajeResponseDto
     public decimal? LongitudPartida { get; set; }
     public string CodigoInvitacion { get; set; } = string.Empty;
     public Guid CreadoPorUsuarioId { get; set; }
+    public bool PuedeEditar { get; set; }
     public DateTimeOffset FechaCreacion { get; set; }
     public DateTimeOffset FechaActualizacion { get; set; }
     public IReadOnlyCollection<string> CategoriaCodigos { get; set; } = new List<string>();
