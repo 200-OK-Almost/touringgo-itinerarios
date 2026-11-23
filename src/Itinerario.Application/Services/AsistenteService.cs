@@ -14,6 +14,7 @@ public class AsistenteService : IAsistenteService
 {
     private readonly IViajeRepository _viajeRepository;
     private readonly ILugaresClient _lugaresClient;
+    private readonly IGeoCalculator _geo;
     private readonly IIntencionService _intencionService;
     private readonly IIntencionLlmService _intencionLlmService;
     private readonly IMensajeLlmService _mensajeLlmService;
@@ -23,6 +24,7 @@ public class AsistenteService : IAsistenteService
     public AsistenteService(
         IViajeRepository viajeRepository,
         ILugaresClient lugaresClient,
+        IGeoCalculator geo,
         IIntencionService intencionService,
         IIntencionLlmService intencionLlmService,
         IMensajeLlmService mensajeLlmService,
@@ -31,6 +33,7 @@ public class AsistenteService : IAsistenteService
     {
         _viajeRepository = viajeRepository;
         _lugaresClient = lugaresClient;
+        _geo = geo;
         _intencionService = intencionService;
         _intencionLlmService = intencionLlmService;
         _mensajeLlmService = mensajeLlmService;
@@ -74,6 +77,10 @@ public class AsistenteService : IAsistenteService
 
         var paradasActuales = await ObtenerParadasActualesAsync(
             itinerario,
+            cancellationToken);
+
+        var referenciaSolicitada = await ObtenerReferenciaSolicitadaAsync(
+            request.ReferenciaLugarId,
             cancellationToken);
 
         var paradasResolubles = paradasActuales
@@ -147,7 +154,17 @@ public class AsistenteService : IAsistenteService
             : presupuestoViaje;
 
         var idsExcluidos = ObtenerIdsExcluidos(viaje);
-        var referencia = ObtenerReferenciaCercania(intencion, paradasActuales);
+        var referencia = ObtenerReferenciaCercania(
+            intencion,
+            paradasActuales,
+            referenciaSolicitada,
+            request.ReferenciaLugarId.HasValue);
+        var radioMetros = referencia is null
+            ? null
+            : intencion.RadioMetros
+                ?? (request.ReferenciaLugarId.HasValue
+                    ? _options.RadioMetrosDefault
+                    : null);
 
         var busqueda = new BusquedaSemanticaLugaresDto
         {
@@ -169,7 +186,7 @@ public class AsistenteService : IAsistenteService
             ExcluirIds = idsExcluidos.ToList(),
             LatitudReferencia = referencia?.Latitud,
             LongitudReferencia = referencia?.Longitud,
-            RadioMetrosMaximo = referencia is null ? null : intencion.RadioMetros,
+            RadioMetrosMaximo = radioMetros,
             SimilitudMinima = _options.SimilitudMinima
         };
 
@@ -203,6 +220,7 @@ public class AsistenteService : IAsistenteService
                 cancellationToken);
 
             var filtrados = FiltrarFallback(catalogo, busqueda, idsExcluidos)
+                .Where(lugar => DentroDelRadio(lugar, busqueda))
                 .Take(_options.TopK)
                 .ToList();
 
@@ -413,11 +431,61 @@ public class AsistenteService : IAsistenteService
         return ids;
     }
 
+    private async Task<LugarCandidatoDto?> ObtenerReferenciaSolicitadaAsync(
+        Guid? referenciaLugarId,
+        CancellationToken cancellationToken)
+    {
+        if (!referenciaLugarId.HasValue)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await _lugaresClient.ObtenerPorIdAsync(
+                referenciaLugarId.Value,
+                cancellationToken);
+        }
+        catch (ServicioExternoNoDisponibleException)
+        {
+            return null;
+        }
+    }
+
+    private bool DentroDelRadio(
+        LugarCandidatoDto lugar,
+        BusquedaSemanticaLugaresDto busqueda)
+    {
+        if (!busqueda.LatitudReferencia.HasValue
+            || !busqueda.LongitudReferencia.HasValue
+            || !busqueda.RadioMetrosMaximo.HasValue
+            || busqueda.RadioMetrosMaximo.Value <= 0)
+        {
+            return true;
+        }
+
+        var metros = _geo.DistanciaMetros(
+            (double)busqueda.LatitudReferencia.Value,
+            (double)busqueda.LongitudReferencia.Value,
+            (double)lugar.Latitud,
+            (double)lugar.Longitud);
+
+        return metros <= busqueda.RadioMetrosMaximo.Value;
+    }
+
     private static LugarCandidatoDto? ObtenerReferenciaCercania(
         IntencionAsistenteDto intencion,
-        IReadOnlyList<ParadaActual> paradasActuales)
+        IReadOnlyList<ParadaActual> paradasActuales,
+        LugarCandidatoDto? referenciaSolicitada,
+        bool buscarReferenciaSolicitada)
     {
-        if (!intencion.RadioMetros.HasValue || paradasActuales.Count == 0)
+        if (referenciaSolicitada is not null)
+        {
+            return referenciaSolicitada;
+        }
+
+        if ((!buscarReferenciaSolicitada && !intencion.RadioMetros.HasValue)
+            || paradasActuales.Count == 0)
         {
             return null;
         }

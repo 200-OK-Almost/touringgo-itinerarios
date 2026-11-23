@@ -180,6 +180,130 @@ public class AsistenteServiceTests
     }
 
     [Fact]
+    public async Task ResponderAsync_ReferenciaSolicitada_UsaSusCoordenadasYRadioDefault()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var itinerario = TestData.CrearItinerario(viaje);
+        var paradaActual = TestData.CrearLugar(
+            "Parada actual",
+            latitud: -34.60m,
+            longitud: -58.38m);
+        TestData.CrearParada(itinerario, paradaActual.Id);
+
+        var referencia = TestData.CrearLugar(
+            "Parada eliminada",
+            latitud: -34.70m,
+            longitud: -58.50m);
+        var bar = TestData.CrearLugar("Bar", "bares_vermu");
+
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = new[] { bar }
+        };
+        lugares.PorId[paradaActual.Id] = paradaActual;
+        lugares.PorId[referencia.Id] = referencia;
+
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Recomendame un bar",
+                NumeroDia = 1,
+                ReferenciaLugarId = referencia.Id
+            },
+            admin);
+
+        var busqueda = Assert.Single(lugares.Busquedas);
+        Assert.Equal(-34.70m, busqueda.LatitudReferencia);
+        Assert.Equal(-58.50m, busqueda.LongitudReferencia);
+        Assert.Equal(800, busqueda.RadioMetrosMaximo);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_ReferenciaInexistente_UsaLaPrimeraParada()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var itinerario = TestData.CrearItinerario(viaje);
+        var paradaActual = TestData.CrearLugar(
+            "Parada actual",
+            latitud: -34.60m,
+            longitud: -58.38m);
+        TestData.CrearParada(itinerario, paradaActual.Id);
+        var bar = TestData.CrearLugar("Bar", "bares_vermu");
+
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = new[] { bar }
+        };
+        lugares.PorId[paradaActual.Id] = paradaActual;
+
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Recomendame un bar",
+                NumeroDia = 1,
+                ReferenciaLugarId = Guid.NewGuid()
+            },
+            admin);
+
+        var busqueda = Assert.Single(lugares.Busquedas);
+        Assert.Equal(-34.60m, busqueda.LatitudReferencia);
+        Assert.Equal(-58.38m, busqueda.LongitudReferencia);
+        Assert.Equal(800, busqueda.RadioMetrosMaximo);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_FallbackRespetaElRadioDeLaReferencia()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var referencia = TestData.CrearLugar(
+            "Parada eliminada",
+            latitud: -34.58m,
+            longitud: -58.42m);
+        var cerca = TestData.CrearLugar(
+            "Cerca",
+            "bares_vermu",
+            latitud: -34.581m,
+            longitud: -58.421m);
+        var lejos = TestData.CrearLugar(
+            "Lejos",
+            "bares_vermu",
+            latitud: -34.70m,
+            longitud: -58.50m);
+
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = Array.Empty<LugarCandidatoDto>(),
+            ResultadoCatalogo = new[] { cerca, lejos }
+        };
+        lugares.PorId[referencia.Id] = referencia;
+
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        var respuesta = await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Recomendame un bar",
+                NumeroDia = 1,
+                ReferenciaLugarId = referencia.Id
+            },
+            admin);
+
+        var recomendacion = Assert.Single(respuesta.Recomendaciones);
+        Assert.Equal(cerca.Id, recomendacion.LugarId);
+        Assert.NotNull(respuesta.Advertencia);
+    }
+
+    [Fact]
     public async Task ResponderAsync_MensajeVacio_LanzaReglaDeNegocio()
     {
         var admin = Guid.NewGuid();
@@ -880,6 +1004,7 @@ public class AsistenteServiceTests
         => new(
             new ViajeRepositoryFalso { Viaje = viaje },
             lugares,
+            new GeoCalculator(),
             new IntencionService(),
             intencionLlm ?? new IntencionLlmServiceFalso(),
             mensajeLlm ?? new MensajeLlmServiceFalso(),
