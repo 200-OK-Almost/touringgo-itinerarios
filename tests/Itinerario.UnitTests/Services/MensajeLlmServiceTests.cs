@@ -32,6 +32,7 @@ public class MensajeLlmServiceTests
         Assert.Contains(contexto.MensajeUsuario, cliente.Prompt);
         Assert.Contains(contexto.Recomendaciones.Single().Nombre, cliente.Prompt);
         Assert.Contains("No inventes lugares", cliente.Prompt);
+        Assert.Contains("Busco un cafe en Puerto Madero", cliente.Prompt);
         Assert.Contains("No digas que aplicaste cambios", cliente.Prompt);
         Assert.Contains("generation_llm", telemetria.Etapas);
         Assert.Contains("llm_ok", telemetria.Resultados);
@@ -221,6 +222,14 @@ public class MensajeLlmServiceTests
         MensajeUsuario = "Agregá un bar para la tarde",
         Accion = TipoAccionAsistente.Agregar,
         NumeroDia = 1,
+        Historial = new[]
+        {
+            new MensajeHistorialDto
+            {
+                Rol = "user",
+                Contenido = "Busco un cafe en Puerto Madero"
+            }
+        },
         Recomendaciones = new[]
         {
             new RecomendacionLugarDto

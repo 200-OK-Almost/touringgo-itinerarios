@@ -95,10 +95,10 @@ public class AsistenteService : IAsistenteService
             })
             .ToList();
 
-        var intencion = _intencionService.Interpretar(
+        var intencion = InterpretarConHistorial(
             mensaje,
-            paradasResolubles,
-            _options.RadioMetrosDefault);
+            request.Historial,
+            paradasResolubles);
         var sinSenal = !_intencionService.TieneSenalDeViaje(mensaje);
         var barrioBusqueda = intencion.Barrio ?? barrio;
 
@@ -117,6 +117,7 @@ public class AsistenteService : IAsistenteService
                 categoriasViaje,
                 viaje,
                 paradasResolubles,
+                request.Historial,
                 intencion);
 
             var crudo = await _intencionLlmService.InterpretarAsync(
@@ -265,6 +266,7 @@ public class AsistenteService : IAsistenteService
                 Accion = intencion.Accion,
                 ParadaObjetivo = intencion.ParadaObjetivo?.Nombre,
                 NumeroDia = itinerario?.NumeroDia ?? request.NumeroDia,
+                Historial = request.Historial ?? Array.Empty<MensajeHistorialDto>(),
                 Recomendaciones = recomendaciones,
                 SinSenal = sinSenal
             };
@@ -309,6 +311,66 @@ public class AsistenteService : IAsistenteService
         return resultado;
     }
 
+    private IntencionAsistenteDto InterpretarConHistorial(
+        string mensaje,
+        IReadOnlyCollection<MensajeHistorialDto>? historial,
+        IReadOnlyCollection<ParadaResolubleDto> paradas)
+    {
+        var intencion = _intencionService.Interpretar(
+            mensaje,
+            paradas,
+            _options.RadioMetrosDefault);
+
+        if (historial is not { Count: > 0 })
+        {
+            return intencion;
+        }
+
+        var necesitaCategoria = intencion.Filtros.CategoriaCodigos.Count == 0;
+        var necesitaBarrio = intencion.Barrio is null;
+
+        if (!necesitaCategoria && !necesitaBarrio)
+        {
+            return intencion;
+        }
+
+        foreach (var mensajeHistorial in historial.Reverse())
+        {
+            if (!string.Equals(
+                    mensajeHistorial.Rol,
+                    "user",
+                    StringComparison.OrdinalIgnoreCase)
+                || string.IsNullOrWhiteSpace(mensajeHistorial.Contenido))
+            {
+                continue;
+            }
+
+            var historica = _intencionService.Interpretar(
+                mensajeHistorial.Contenido,
+                paradas,
+                _options.RadioMetrosDefault);
+
+            if (necesitaCategoria && historica.Filtros.CategoriaCodigos.Count > 0)
+            {
+                intencion.Filtros.CategoriaCodigos = historica.Filtros.CategoriaCodigos;
+                necesitaCategoria = false;
+            }
+
+            if (necesitaBarrio && historica.Barrio is not null)
+            {
+                intencion.Barrio = historica.Barrio;
+                necesitaBarrio = false;
+            }
+
+            if (!necesitaCategoria && !necesitaBarrio)
+            {
+                break;
+            }
+        }
+
+        return intencion;
+    }
+
     private static bool EsIntencionDebil(IntencionAsistenteDto intencion)
     {
         if (intencion.Aclaracion is not null)
@@ -342,6 +404,7 @@ public class AsistenteService : IAsistenteService
         IReadOnlyCollection<string> categoriasViaje,
         Viaje viaje,
         IReadOnlyCollection<ParadaResolubleDto> paradas,
+        IReadOnlyCollection<MensajeHistorialDto>? historial,
         IntencionAsistenteDto intencion)
         => new()
         {
@@ -351,6 +414,7 @@ public class AsistenteService : IAsistenteService
             Barrio = barrio,
             NivelPresupuesto = viaje.NivelPresupuesto,
             CategoriasViaje = categoriasViaje,
+            Historial = historial ?? Array.Empty<MensajeHistorialDto>(),
             AptoNinos = intencion.Filtros.AptoNinos == true || RequiereAptoNinos(viaje),
             AccesibleMovilidadReducida =
                 intencion.Filtros.AccesibleMovilidadReducida == true

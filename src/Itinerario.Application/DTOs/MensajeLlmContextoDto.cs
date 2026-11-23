@@ -9,6 +9,7 @@ public class MensajeLlmContextoDto
     public TipoAccionAsistente Accion { get; set; }
     public string? ParadaObjetivo { get; set; }
     public short? NumeroDia { get; set; }
+    public IReadOnlyCollection<MensajeHistorialDto> Historial { get; set; } = new List<MensajeHistorialDto>();
     public bool SinSenal { get; set; }
     public IReadOnlyCollection<RecomendacionLugarDto> Recomendaciones { get; set; } = new List<RecomendacionLugarDto>();
 }
