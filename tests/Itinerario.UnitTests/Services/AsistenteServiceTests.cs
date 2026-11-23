@@ -53,6 +53,38 @@ public class AsistenteServiceTests
     }
 
     [Fact]
+    public async Task ResponderAsync_RespetaTopKConfigurado()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = Enumerable.Range(1, 10)
+                .Select(numero => TestData.CrearLugar($"Café {numero}"))
+                .ToList()
+        };
+        var service = CrearServicio(
+            viaje,
+            lugares,
+            new TelemetriaFalsa(),
+            new AsistenteOptions
+            {
+                TopK = 5,
+                MinResultados = 3,
+                RadioMetrosDefault = 800
+            });
+
+        var respuesta = await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto { Mensaje = "café" },
+            admin);
+
+        Assert.Equal(5, respuesta.Recomendaciones.Count);
+        var busqueda = Assert.Single(lugares.Busquedas);
+        Assert.Equal(5, busqueda.Cantidad);
+    }
+
+    [Fact]
     public async Task ResponderAsync_MiembroPuedeConsultarPeroNoAplicar()
     {
         var admin = Guid.NewGuid();

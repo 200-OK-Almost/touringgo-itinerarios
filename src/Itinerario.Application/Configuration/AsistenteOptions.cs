@@ -7,7 +7,7 @@ public class AsistenteOptions
     public bool Enabled { get; set; }
     public bool LlmEnabled { get; set; }
     public bool LlmGenerarMensaje { get; set; }
-    public int TopK { get; set; } = 12;
+    public int TopK { get; set; } = 5;
     public int MinResultados { get; set; } = 3;
     public double? SimilitudMinima { get; set; }
     public double RadioMetrosDefault { get; set; } = 800;

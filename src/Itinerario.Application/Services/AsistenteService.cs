@@ -232,6 +232,7 @@ public class AsistenteService : IAsistenteService
         }
 
         var recomendaciones = lugares
+            .Take(_options.TopK)
             .Select(MapearRecomendacion)
             .ToList();
 

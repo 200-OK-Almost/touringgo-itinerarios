@@ -13,7 +13,7 @@ public class AsistenteOptionsTests
         Assert.False(options.Enabled);
         Assert.False(options.LlmEnabled);
         Assert.False(options.LlmGenerarMensaje);
-        Assert.Equal(12, options.TopK);
+        Assert.Equal(5, options.TopK);
         Assert.Equal(3, options.MinResultados);
         Assert.Null(options.SimilitudMinima);
         Assert.Equal(800d, options.RadioMetrosDefault);
