@@ -88,6 +88,40 @@ public class IntencionServiceInterpretarTests
         Assert.Contains("librerias_diseno", intencion.Filtros.CategoriaCodigos);
     }
 
+    [Theory]
+    [InlineData("Agrega un cafe en Puerto Madero", BarrioCaba.PuertoMadero)]
+    [InlineData("Recomendame un museo en Recoleta", BarrioCaba.Recoleta)]
+    [InlineData("Busco un bar en San Telmo", BarrioCaba.SanTelmo)]
+    [InlineData("Algo en San Nicolas", BarrioCaba.SanNicolas)]
+    [InlineData("Un parque en Palermo", BarrioCaba.Palermo)]
+    public void Interpretar_DetectaBarrio(
+        string mensaje,
+        BarrioCaba esperado)
+    {
+        var intencion = _service.Interpretar(
+            mensaje,
+            Array.Empty<ParadaResolubleDto>());
+
+        Assert.Equal(esperado, intencion.Barrio);
+        Assert.DoesNotContain("palermo", intencion.QuerySemantica);
+        Assert.DoesNotContain("recoleta", intencion.QuerySemantica);
+        Assert.DoesNotContain("puerto", intencion.QuerySemantica);
+        Assert.DoesNotContain("madero", intencion.QuerySemantica);
+        Assert.DoesNotContain("san", intencion.QuerySemantica);
+        Assert.DoesNotContain("telmo", intencion.QuerySemantica);
+        Assert.DoesNotContain("nicolas", intencion.QuerySemantica);
+    }
+
+    [Fact]
+    public void Interpretar_SinBarrio_DevuelveNull()
+    {
+        var intencion = _service.Interpretar(
+            "Agrega un cafe",
+            Array.Empty<ParadaResolubleDto>());
+
+        Assert.Null(intencion.Barrio);
+    }
+
     [Fact]
     public void Interpretar_Cerca_UsaRadioConfigurado()
     {

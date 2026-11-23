@@ -27,6 +27,8 @@ public class IntencionServiceTests
     [InlineData("Quiero un bar", true)]
     [InlineData("Un lugar vegano", true)]
     [InlineData("Algo romántico", true)]
+    [InlineData("puerto madero", true)]
+    [InlineData("san telmo", true)]
     [InlineData("Un lugar para niños", true)]
     [InlineData("Recomendame un museo", true)]
     public void TieneSenalDeViaje_DetectaSoloConsultasDelViaje(

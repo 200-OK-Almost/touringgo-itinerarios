@@ -124,11 +124,23 @@ public class IntencionService : IIntencionService
         "gracias", "chau", "adios", "hasta", "luego", "ok", "dale"
     };
 
+    private static readonly (string Termino, BarrioCaba Barrio)[] BarriosDetectables =
+    {
+        ("puerto madero", BarrioCaba.PuertoMadero),
+        ("puertomadero", BarrioCaba.PuertoMadero),
+        ("san telmo", BarrioCaba.SanTelmo),
+        ("santelmo", BarrioCaba.SanTelmo),
+        ("san nicolas", BarrioCaba.SanNicolas),
+        ("sannicolas", BarrioCaba.SanNicolas),
+        ("palermo", BarrioCaba.Palermo),
+        ("recoleta", BarrioCaba.Recoleta)
+    };
+
     private static readonly HashSet<string> PalabrasIgnoradasQuery = new(PalabrasIgnoradas, StringComparer.Ordinal)
     {
         "cerca", "cercano", "cercana", "cercanos", "cercanas",
         "proximo", "proxima", "proximos", "proximas",
-        "barrio", "zona", "palermo", "recoleta", "santelmo", "san", "sannicolas", "nicolas",
+        "barrio", "zona", "palermo", "recoleta", "santelmo", "san", "telmo", "sannicolas", "nicolas",
         "puerto", "madero", "puertomadero",
         "economico", "economica", "barato", "barata",
         "equilibrado", "equilibrada", "moderado", "moderada",
@@ -187,6 +199,11 @@ public class IntencionService : IIntencionService
             return true;
         }
 
+        if (DetectarBarrio(normalizado).HasValue)
+        {
+            return true;
+        }
+
         var filtros = ExtraerFiltros(normalizado);
 
         return filtros.CategoriaCodigos.Count > 0
@@ -197,6 +214,19 @@ public class IntencionService : IIntencionService
             || !string.IsNullOrWhiteSpace(filtros.RestriccionDietaria)
             || filtros.Turno.HasValue
             || filtros.NivelPrecioMaximo.HasValue;
+    }
+
+    private static BarrioCaba? DetectarBarrio(string normalizado)
+    {
+        foreach (var (termino, barrio) in BarriosDetectables)
+        {
+            if (ContieneAlguna(normalizado, new[] { termino }))
+            {
+                return barrio;
+            }
+        }
+
+        return null;
     }
 
     public TipoAccionAsistente DetectarAccion(string? mensaje)
@@ -284,6 +314,7 @@ public class IntencionService : IIntencionService
         var intencion = new IntencionAsistenteDto
         {
             Accion = accion,
+            Barrio = DetectarBarrio(normalizado),
             Filtros = ExtraerFiltros(normalizado),
             RadioMetros = MencionaCercania(normalizado) ? radioMetrosDefault : null
         };

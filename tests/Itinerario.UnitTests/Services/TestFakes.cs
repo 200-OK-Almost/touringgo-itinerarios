@@ -132,6 +132,8 @@ internal sealed class LugaresClientFalso : ILugaresClient
 {
     public List<BusquedaSemanticaLugaresDto> Busquedas { get; } = new();
 
+    public List<BarrioCaba> BarriosCatalogo { get; } = new();
+
     public IReadOnlyCollection<LugarCandidatoDto> ResultadoSemantico { get; set; }
         = Array.Empty<LugarCandidatoDto>();
 
@@ -146,7 +148,10 @@ internal sealed class LugaresClientFalso : ILugaresClient
         BarrioCaba barrio,
         IReadOnlyCollection<string> categoriaCodigos,
         CancellationToken cancellationToken = default)
-        => Task.FromResult(ResultadoCatalogo);
+    {
+        BarriosCatalogo.Add(barrio);
+        return Task.FromResult(ResultadoCatalogo);
+    }
 
     public Task<IReadOnlyCollection<LugarCandidatoDto>> BuscarSemanticoAsync(
         BusquedaSemanticaLugaresDto busqueda,

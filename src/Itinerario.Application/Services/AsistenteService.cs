@@ -100,6 +100,7 @@ public class AsistenteService : IAsistenteService
             paradasResolubles,
             _options.RadioMetrosDefault);
         var sinSenal = !_intencionService.TieneSenalDeViaje(mensaje);
+        var barrioBusqueda = intencion.Barrio ?? barrio;
 
         var puedeAplicar = viaje.EsAdministrador(usuarioIdSolicitante);
 
@@ -112,7 +113,7 @@ public class AsistenteService : IAsistenteService
                 viajeId,
                 mensaje,
                 itinerario?.NumeroDia ?? request.NumeroDia,
-                barrio,
+                barrioBusqueda,
                 categoriasViaje,
                 viaje,
                 paradasResolubles,
@@ -126,9 +127,12 @@ public class AsistenteService : IAsistenteService
 
             if (intencionLlm is not null)
             {
+                intencionLlm.Barrio ??= intencion.Barrio;
                 intencion = intencionLlm;
             }
         }
+
+        barrioBusqueda = intencion.Barrio ?? barrio;
 
         if (intencion.Aclaracion is not null)
         {
@@ -172,7 +176,7 @@ public class AsistenteService : IAsistenteService
         {
             Query = intencion.QuerySemantica,
             Cantidad = _options.TopK,
-            Barrio = barrio,
+            Barrio = barrioBusqueda,
             CategoriaCodigos = categoriasBusqueda.Count > 0 ? categoriasBusqueda : null,
             NivelPrecioMaximo = presupuestoMaximo,
             SoloAlAireLibre = intencion.Filtros.SoloAlAireLibre,
@@ -221,7 +225,7 @@ public class AsistenteService : IAsistenteService
             if (lugares.Count < _options.MinResultados)
             {
                 var catalogo = await _lugaresClient.BuscarAsync(
-                    barrio,
+                    barrioBusqueda,
                     categoriasBusqueda,
                     cancellationToken);
 

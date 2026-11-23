@@ -184,6 +184,138 @@ public class AsistenteServiceTests
     }
 
     [Fact]
+    public async Task ResponderAsync_BarrioEnMensaje_UsaEseBarrioEnBusqueda()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = new[]
+            {
+                TestData.CrearLugar("Cafe"),
+                TestData.CrearLugar("Museo", "museos_galerias")
+            }
+        };
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Recomendame un cafe en Puerto Madero",
+                NumeroDia = 1
+            },
+            admin);
+
+        var busqueda = Assert.Single(lugares.Busquedas);
+        Assert.Equal(BarrioCaba.PuertoMadero, busqueda.Barrio);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_SinBarrio_UsaBarrioDelViaje()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = new[]
+            {
+                TestData.CrearLugar("Cafe"),
+                TestData.CrearLugar("Museo", "museos_galerias")
+            }
+        };
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Recomendame un cafe",
+                NumeroDia = 1
+            },
+            admin);
+
+        var busqueda = Assert.Single(lugares.Busquedas);
+        Assert.Equal(viaje.Barrio, busqueda.Barrio);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_BarrioEnMensaje_UsaEseBarrioEnFallback()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = Array.Empty<LugarCandidatoDto>(),
+            ResultadoCatalogo = new[] { TestData.CrearLugar("Cafe") }
+        };
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Recomendame un cafe en Recoleta",
+                NumeroDia = 1
+            },
+            admin);
+
+        var busqueda = Assert.Single(lugares.Busquedas);
+        Assert.Equal(BarrioCaba.Recoleta, busqueda.Barrio);
+        Assert.Equal(BarrioCaba.Recoleta, Assert.Single(lugares.BarriosCatalogo));
+    }
+
+    [Fact]
+    public async Task ResponderAsync_BarrioSePreservaCuandoRespondeElLlmDeIntencion()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = new[]
+            {
+                TestData.CrearLugar("Cafe"),
+                TestData.CrearLugar("Museo", "museos_galerias")
+            }
+        };
+        var intencionLlm = new IntencionLlmServiceFalso
+        {
+            Respuesta = new IntencionLlmCruda
+            {
+                Accion = "Recomendar",
+                QuerySemantica = "cafe",
+                Categorias = new List<string> { "cafe_especialidad" }
+            }
+        };
+        var service = CrearServicio(
+            viaje,
+            lugares,
+            new TelemetriaFalsa(),
+            new AsistenteOptions
+            {
+                TopK = 5,
+                MinResultados = 2,
+                RadioMetrosDefault = 800,
+                LlmEnabled = true
+            },
+            intencionLlm);
+
+        await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Quiero algo en Puerto Madero",
+                NumeroDia = 1
+            },
+            admin);
+
+        Assert.True(intencionLlm.FueLlamado);
+        var busqueda = Assert.Single(lugares.Busquedas);
+        Assert.Equal(BarrioCaba.PuertoMadero, busqueda.Barrio);
+        Assert.Equal("cafe", busqueda.Query);
+    }
+
+    [Fact]
     public async Task ResponderAsync_MensajeCerca_DefineRadioYReferencia()
     {
         var admin = Guid.NewGuid();
