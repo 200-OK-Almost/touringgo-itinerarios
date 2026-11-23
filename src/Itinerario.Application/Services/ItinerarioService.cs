@@ -776,7 +776,8 @@ public class ItinerarioService : IItinerarioService
             .FirstOrDefault();
 
         return libre
-            ?? throw new ReglaDeNegocioException("No hay turnos libres en este día.");
+            ?? throw new ReglaDeNegocioException(
+                "Disculpa pero no puedo agregar una parada más al itinerario, ya está completo.");
     }
 
     private static (double lat, double lon)? ObtenerReferencia(
