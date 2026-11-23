@@ -1,5 +1,6 @@
 using Itinerario.Application.DTOs;
 using Itinerario.Application.DTOs.Gastos;
+using Itinerario.Application.Interfaces;
 using Itinerario.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,10 +12,13 @@ using System.Security.Claims;
 public sealed class GastosController : ControllerBase
 {
     private readonly IGastosService _gastoService;
+    private readonly ICurrentUser _currentUser;
 
-    public GastosController(IGastosService gastoService)
+    public GastosController(IGastosService gastoService, ICurrentUser currentUser)
     {
         _gastoService = gastoService;
+        _currentUser = currentUser;
+
     }
 
     // GET /api/viajes/{viajeId}/gastos
@@ -27,11 +31,9 @@ public sealed class GastosController : ControllerBase
         [FromQuery] FiltroGastosDto filtro,
         CancellationToken ct)
     {
-        var usuarioId = ObtenerUsuarioActualId();
-
         var resultado = await _gastoService.ListarAsync(
             viajeId,
-            usuarioId,
+            _currentUser.UsuarioId,
             filtro,
             ct);
 
@@ -47,12 +49,10 @@ public sealed class GastosController : ControllerBase
         [FromRoute] Guid gastoId,
         CancellationToken ct)
     {
-        var usuarioId = ObtenerUsuarioActualId();
-
         var gasto = await _gastoService.ObtenerPorIdAsync(
             viajeId,
             gastoId,
-            usuarioId,
+            _currentUser.UsuarioId,
             ct);
 
         return Ok(gasto);
@@ -67,11 +67,10 @@ public sealed class GastosController : ControllerBase
         [FromBody] CrearGastoRequestDto request,
         CancellationToken ct)
     {
-        var usuarioId = ObtenerUsuarioActualId();
 
         var gasto = await _gastoService.CrearAsync(
             viajeId,
-            usuarioId,
+            _currentUser.UsuarioId,
             request,
             ct);
 
@@ -96,12 +95,10 @@ public sealed class GastosController : ControllerBase
         [FromBody] ActualizarGastoRequestDto request,
         CancellationToken ct)
     {
-        var usuarioId = ObtenerUsuarioActualId();
-
         var gasto = await _gastoService.ActualizarAsync(
             viajeId,
             gastoId,
-            usuarioId,
+            _currentUser.UsuarioId,
             request,
             ct);
 
@@ -117,12 +114,10 @@ public sealed class GastosController : ControllerBase
         [FromRoute] Guid gastoId,
         CancellationToken ct)
     {
-        var usuarioId = ObtenerUsuarioActualId();
-
         await _gastoService.EliminarAsync(
             viajeId,
             gastoId,
-            usuarioId,
+            _currentUser.UsuarioId,
             ct);
 
         return NoContent();
@@ -138,11 +133,9 @@ public sealed class GastosController : ControllerBase
         [FromQuery] TipoMoneda moneda,
         CancellationToken ct)
     {
-        var usuarioId = ObtenerUsuarioActualId();
-
         var balance = await _gastoService.ObtenerBalanceAsync(
             viajeId,
-            usuarioId,
+            _currentUser.UsuarioId,
             moneda,
             ct);
 
@@ -161,26 +154,13 @@ public sealed class GastosController : ControllerBase
         [FromBody] LiquidarGastosRequestDto request,
         CancellationToken ct)
     {
-        var usuarioId = ObtenerUsuarioActualId();
 
         var liquidacion = await _gastoService.LiquidarAsync(
             viajeId,
-            usuarioId,
+            _currentUser.UsuarioId,
             request,
             ct);
 
         return Ok(liquidacion);
-    }
-
-    private Guid ObtenerUsuarioActualId()
-    {
-        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-
-        if (!Guid.TryParse(claim, out var usuarioId))
-        {
-            throw new UnauthorizedAccessException("No se pudo identificar al usuario autenticado.");
-        }
-
-        return usuarioId;
     }
 }
