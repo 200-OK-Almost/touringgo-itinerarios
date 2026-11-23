@@ -172,6 +172,9 @@ public class AsistenteService : IAsistenteService
                 ?? (request.ReferenciaLugarId.HasValue
                     ? _options.RadioMetrosDefault
                     : null);
+        var puntoOrden = referencia is not null
+            ? ((double)referencia.Latitud, (double)referencia.Longitud)
+            : ObtenerPuntoReferencia(itinerario, viaje);
 
         var busqueda = new BusquedaSemanticaLugaresDto
         {
@@ -199,6 +202,7 @@ public class AsistenteService : IAsistenteService
 
         var falloSemantico = false;
         var usoFallback = false;
+        var busquedaAmpliada = false;
         IReadOnlyCollection<LugarCandidatoDto> lugares = Array.Empty<LugarCandidatoDto>();
 
         if (!sinSenal)
@@ -239,6 +243,50 @@ public class AsistenteService : IAsistenteService
                 {
                     lugares = filtrados;
                     usoFallback = true;
+                }
+            }
+
+            if (lugares.Count == 0)
+            {
+                var busquedaAmplia = new BusquedaSemanticaLugaresDto
+                {
+                    Query = busqueda.Query,
+                    Cantidad = Math.Max(_options.TopK, 20),
+                    Barrio = null,
+                    CategoriaCodigos = busqueda.CategoriaCodigos,
+                    NivelPrecioMaximo = busqueda.NivelPrecioMaximo,
+                    SoloAlAireLibre = busqueda.SoloAlAireLibre,
+                    SoloBajoTecho = busqueda.SoloBajoTecho,
+                    AptoNinos = busqueda.AptoNinos,
+                    AccesibleMovilidadReducida = busqueda.AccesibleMovilidadReducida,
+                    RestriccionDietaria = busqueda.RestriccionDietaria,
+                    ExcluirIds = busqueda.ExcluirIds,
+                    LatitudReferencia = busqueda.LatitudReferencia,
+                    LongitudReferencia = busqueda.LongitudReferencia,
+                    RadioMetrosMaximo = null,
+                    SimilitudMinima = busqueda.SimilitudMinima
+                };
+
+                try
+                {
+                    var ampliados = await _lugaresClient.BuscarSemanticoAsync(
+                        busquedaAmplia,
+                        cancellationToken);
+
+                    if (ampliados.Count > 0)
+                    {
+                        lugares = OrdenarPorDistancia(
+                                ampliados,
+                                puntoOrden)
+                            .Take(_options.TopK)
+                            .ToList();
+                        busquedaAmpliada = true;
+                        usoFallback = false;
+                    }
+                }
+                catch (ServicioExternoNoDisponibleException)
+                {
+                    falloSemantico = true;
                 }
             }
         }
@@ -287,8 +335,10 @@ public class AsistenteService : IAsistenteService
             PuedeAplicar = puedeAplicar,
             Recomendaciones = recomendaciones,
             Accion = accion,
-            Advertencia = usoFallback
-                ? falloSemantico
+            Advertencia = busquedaAmpliada
+                ? ConstruirAdvertenciaAmpliada(categoriasBusqueda, barrioBusqueda)
+                : usoFallback
+                    ? falloSemantico
                     ? "No se pudo usar la búsqueda semántica; se usó el catálogo filtrado."
                     : "La búsqueda semántica no devolvió suficientes resultados; se usó el catálogo filtrado."
                 : null
@@ -296,11 +346,13 @@ public class AsistenteService : IAsistenteService
 
         var estado = sinSenal
             ? "sin_senal"
-            : recomendaciones.Count == 0
-                ? "sin_resultados"
-                : usoFallback
-                    ? "fallback"
-                    : "ok";
+            : busquedaAmpliada
+                ? "ampliado"
+                : recomendaciones.Count == 0
+                    ? "sin_resultados"
+                    : usoFallback
+                        ? "fallback"
+                        : "ok";
 
         actividad?.SetTag("asistente.resultado", estado);
         actividad?.SetTag("asistente.recomendaciones", recomendaciones.Count);
@@ -552,6 +604,74 @@ public class AsistenteService : IAsistenteService
 
         return metros <= busqueda.RadioMetrosMaximo.Value;
     }
+
+    private IEnumerable<LugarCandidatoDto> OrdenarPorDistancia(
+        IEnumerable<LugarCandidatoDto> lugares,
+        (double Lat, double Lon)? referencia)
+    {
+        if (referencia is null)
+        {
+            return lugares;
+        }
+
+        return lugares.OrderBy(lugar => _geo.DistanciaMetros(
+            referencia.Value.Lat,
+            referencia.Value.Lon,
+            (double)lugar.Latitud,
+            (double)lugar.Longitud));
+    }
+
+    private static (double Lat, double Lon)? ObtenerPuntoReferencia(
+        ItinerarioEntity? itinerario,
+        Viaje viaje)
+    {
+        if (itinerario?.OrigenLatitud is { } origenLat
+            && itinerario.OrigenLongitud is { } origenLon)
+        {
+            return ((double)origenLat, (double)origenLon);
+        }
+
+        if (viaje.LatitudPartida is { } partidaLat
+            && viaje.LongitudPartida is { } partidaLon)
+        {
+            return ((double)partidaLat, (double)partidaLon);
+        }
+
+        return null;
+    }
+
+    private static string ConstruirAdvertenciaAmpliada(
+        IReadOnlyCollection<string> categorias,
+        BarrioCaba barrio)
+    {
+        var categoria = categorias
+            .Select(NombreCategoria)
+            .FirstOrDefault(nombre => nombre is not null)
+            ?? "lugares";
+
+        return $"No encontré {categoria} en {FormatearBarrio(barrio)}. " +
+            "Te muestro opciones cercanas en otros barrios.";
+    }
+
+    private static string? NombreCategoria(string codigo) => codigo switch
+    {
+        "cafe_especialidad" => "cafeterías",
+        "museos_galerias" => "museos",
+        "parques_aire_libre" => "parques",
+        "librerias_diseno" => "librerías",
+        "bares_vermu" => "bares",
+        "gastronomia_clasica" => "restaurantes",
+        "cocteleria_autor" => "coctelerías",
+        _ => null
+    };
+
+    private static string FormatearBarrio(BarrioCaba barrio) => barrio switch
+    {
+        BarrioCaba.SanTelmo => "San Telmo",
+        BarrioCaba.SanNicolas => "San Nicolás",
+        BarrioCaba.PuertoMadero => "Puerto Madero",
+        _ => barrio.ToString()
+    };
 
     private static LugarCandidatoDto? ObtenerReferenciaCercania(
         IntencionAsistenteDto intencion,

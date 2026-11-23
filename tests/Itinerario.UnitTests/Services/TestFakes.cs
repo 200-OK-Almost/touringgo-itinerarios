@@ -137,6 +137,12 @@ internal sealed class LugaresClientFalso : ILugaresClient
     public IReadOnlyCollection<LugarCandidatoDto> ResultadoSemantico { get; set; }
         = Array.Empty<LugarCandidatoDto>();
 
+    public IReadOnlyCollection<LugarCandidatoDto> ResultadoSemanticoSinBarrio { get; set; }
+        = Array.Empty<LugarCandidatoDto>();
+
+    public Dictionary<BarrioCaba, IReadOnlyCollection<LugarCandidatoDto>>
+        ResultadosSemanticosPorBarrio { get; } = new();
+
     public IReadOnlyCollection<LugarCandidatoDto> ResultadoCatalogo { get; set; }
         = Array.Empty<LugarCandidatoDto>();
 
@@ -165,7 +171,16 @@ internal sealed class LugaresClientFalso : ILugaresClient
                 "Búsqueda semántica no disponible en tests.");
         }
 
-        return Task.FromResult(ResultadoSemantico);
+        if (busqueda.Barrio is { } barrio
+            && ResultadosSemanticosPorBarrio.TryGetValue(barrio, out var porBarrio))
+        {
+            return Task.FromResult(porBarrio);
+        }
+
+        return Task.FromResult(
+            busqueda.Barrio is null
+                ? ResultadoSemanticoSinBarrio
+                : ResultadoSemantico);
     }
 
     public Task<LugarCandidatoDto?> ObtenerPorIdAsync(

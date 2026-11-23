@@ -244,10 +244,12 @@ public class AsistenteServiceTests
     {
         var admin = Guid.NewGuid();
         var viaje = TestData.CrearViaje(admin);
+        var cafe = TestData.CrearLugar("Cafe");
+        cafe.Barrio = BarrioCaba.Recoleta;
         var lugares = new LugaresClientFalso
         {
             ResultadoSemantico = Array.Empty<LugarCandidatoDto>(),
-            ResultadoCatalogo = new[] { TestData.CrearLugar("Cafe") }
+            ResultadoCatalogo = new[] { cafe }
         };
         var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
 
@@ -478,6 +480,102 @@ public class AsistenteServiceTests
         Assert.True(mensajeLlm.FueLlamado);
         Assert.NotNull(mensajeLlm.Contexto);
         Assert.Same(historial, mensajeLlm.Contexto!.Historial);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_SinResultadosEnBarrio_AmpliaBusquedaYOrdenaPorDistancia()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        viaje.LatitudPartida = -34.58m;
+        viaje.LongitudPartida = -58.42m;
+
+        var lejos = TestData.CrearLugar(
+            "Cafe lejos",
+            latitud: -34.70m,
+            longitud: -58.50m);
+        var cerca = TestData.CrearLugar(
+            "Cafe cerca",
+            latitud: -34.581m,
+            longitud: -58.421m);
+
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = Array.Empty<LugarCandidatoDto>(),
+            ResultadoCatalogo = Array.Empty<LugarCandidatoDto>(),
+            ResultadoSemanticoSinBarrio = new[] { lejos, cerca }
+        };
+        lugares.ResultadosSemanticosPorBarrio[BarrioCaba.PuertoMadero] =
+            Array.Empty<LugarCandidatoDto>();
+
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        var respuesta = await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Recomendame un cafe en Puerto Madero",
+                NumeroDia = 1
+            },
+            admin);
+
+        Assert.Equal(2, lugares.Busquedas.Count);
+        Assert.Equal(BarrioCaba.PuertoMadero, lugares.Busquedas[0].Barrio);
+        Assert.Null(lugares.Busquedas[1].Barrio);
+        Assert.Null(lugares.Busquedas[1].RadioMetrosMaximo);
+        Assert.Equal(BarrioCaba.PuertoMadero, Assert.Single(lugares.BarriosCatalogo));
+        Assert.Equal(cerca.Id, respuesta.Recomendaciones.First().LugarId);
+        Assert.NotNull(respuesta.Advertencia);
+        Assert.Contains("cafeterías", respuesta.Advertencia);
+        Assert.Contains("Puerto Madero", respuesta.Advertencia);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_BusquedaAmpliada_RespetaTopK()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        viaje.LatitudPartida = -34.58m;
+        viaje.LongitudPartida = -58.42m;
+
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = Array.Empty<LugarCandidatoDto>(),
+            ResultadoCatalogo = Array.Empty<LugarCandidatoDto>(),
+            ResultadoSemanticoSinBarrio = Enumerable.Range(1, 10)
+                .Select(numero => TestData.CrearLugar(
+                    $"Cafe {numero}",
+                    latitud: -34.58m - (numero * 0.001m),
+                    longitud: -58.42m))
+                .ToList()
+        };
+        lugares.ResultadosSemanticosPorBarrio[BarrioCaba.PuertoMadero] =
+            Array.Empty<LugarCandidatoDto>();
+
+        var service = CrearServicio(
+            viaje,
+            lugares,
+            new TelemetriaFalsa(),
+            new AsistenteOptions
+            {
+                TopK = 5,
+                MinResultados = 2,
+                RadioMetrosDefault = 800
+            });
+
+        var respuesta = await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Recomendame un cafe en Puerto Madero",
+                NumeroDia = 1
+            },
+            admin);
+
+        Assert.Equal(5, respuesta.Recomendaciones.Count);
+        Assert.Equal(
+            Math.Max(5, 20),
+            lugares.Busquedas[1].Cantidad);
     }
 
     [Fact]
