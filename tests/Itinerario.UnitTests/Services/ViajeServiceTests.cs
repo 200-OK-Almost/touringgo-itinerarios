@@ -25,6 +25,7 @@ public class ViajeServiceTests
 
         var respuesta = await service.CrearAsync(dto, Guid.NewGuid());
 
+        Assert.True(respuesta.PuedeEditar);
         Assert.NotNull(respuesta.Dias);
         var dia1 = respuesta.Dias.Single(dia => dia.NumeroDia == 1);
         var dia2 = respuesta.Dias.Single(dia => dia.NumeroDia == 2);
@@ -83,17 +84,39 @@ public class ViajeServiceTests
             }
         };
 
-        await service.ActualizarAsync(
+        var respuesta = await service.ActualizarAsync(
             viaje.Id,
             dto,
             viaje.CreadoPorUsuarioId);
 
+        Assert.True(respuesta.PuedeEditar);
         Assert.NotNull(repo.DiasSincronizados);
         var dia2 = repo.DiasSincronizados!.Single(dia => dia.NumeroDia == 2);
         Assert.Equal(TipoViaje.Familia, dia2.TipoViaje);
         Assert.Equal(
             new[] { "gastronomia_clasica", "parques_aire_libre" },
             dia2.Etiquetas.Select(e => e.CategoriaCodigo).OrderBy(c => c).ToArray());
+    }
+
+    [Fact]
+    public async Task ObtenerPorIdAsync_CalculaPuedeEditarSegunRol()
+    {
+        var viaje = CrearViajeExistente();
+        var miembroId = Guid.NewGuid();
+        viaje.AgregarMiembro(miembroId, RolMiembro.Miembro);
+
+        var repo = new ViajeRepositoryFalso { ViajeExistente = viaje };
+        var service = new ViajeService(repo, new LugaresClientFalso());
+
+        var comoAdmin = await service.ObtenerPorIdAsync(
+            viaje.Id,
+            viaje.CreadoPorUsuarioId);
+        var comoMiembro = await service.ObtenerPorIdAsync(
+            viaje.Id,
+            miembroId);
+
+        Assert.True(comoAdmin.PuedeEditar);
+        Assert.False(comoMiembro.PuedeEditar);
     }
 
     private static ViajeCreateDto CrearDto(params ViajeDiaCreateDto[] dias)

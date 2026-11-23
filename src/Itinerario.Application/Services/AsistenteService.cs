@@ -14,6 +14,7 @@ public class AsistenteService : IAsistenteService
 {
     private readonly IViajeRepository _viajeRepository;
     private readonly ILugaresClient _lugaresClient;
+    private readonly IGeoCalculator _geo;
     private readonly IIntencionService _intencionService;
     private readonly IIntencionLlmService _intencionLlmService;
     private readonly IMensajeLlmService _mensajeLlmService;
@@ -23,6 +24,7 @@ public class AsistenteService : IAsistenteService
     public AsistenteService(
         IViajeRepository viajeRepository,
         ILugaresClient lugaresClient,
+        IGeoCalculator geo,
         IIntencionService intencionService,
         IIntencionLlmService intencionLlmService,
         IMensajeLlmService mensajeLlmService,
@@ -31,6 +33,7 @@ public class AsistenteService : IAsistenteService
     {
         _viajeRepository = viajeRepository;
         _lugaresClient = lugaresClient;
+        _geo = geo;
         _intencionService = intencionService;
         _intencionLlmService = intencionLlmService;
         _mensajeLlmService = mensajeLlmService;
@@ -76,6 +79,10 @@ public class AsistenteService : IAsistenteService
             itinerario,
             cancellationToken);
 
+        var referenciaSolicitada = await ObtenerReferenciaSolicitadaAsync(
+            request.ReferenciaLugarId,
+            cancellationToken);
+
         var paradasResolubles = paradasActuales
             .Select(parada => new ParadaResolubleDto
             {
@@ -92,10 +99,12 @@ public class AsistenteService : IAsistenteService
             mensaje,
             paradasResolubles,
             _options.RadioMetrosDefault);
+        var sinSenal = !_intencionService.TieneSenalDeViaje(mensaje);
 
         var puedeAplicar = viaje.EsAdministrador(usuarioIdSolicitante);
 
-        if (_options.LlmEnabled
+        if (!sinSenal
+            && _options.LlmEnabled
             && intencion.Aclaracion is null
             && EsIntencionDebil(intencion))
         {
@@ -147,7 +156,17 @@ public class AsistenteService : IAsistenteService
             : presupuestoViaje;
 
         var idsExcluidos = ObtenerIdsExcluidos(viaje);
-        var referencia = ObtenerReferenciaCercania(intencion, paradasActuales);
+        var referencia = ObtenerReferenciaCercania(
+            intencion,
+            paradasActuales,
+            referenciaSolicitada,
+            request.ReferenciaLugarId.HasValue);
+        var radioMetros = referencia is null
+            ? null
+            : intencion.RadioMetros
+                ?? (request.ReferenciaLugarId.HasValue
+                    ? _options.RadioMetrosDefault
+                    : null);
 
         var busqueda = new BusquedaSemanticaLugaresDto
         {
@@ -169,62 +188,71 @@ public class AsistenteService : IAsistenteService
             ExcluirIds = idsExcluidos.ToList(),
             LatitudReferencia = referencia?.Latitud,
             LongitudReferencia = referencia?.Longitud,
-            RadioMetrosMaximo = referencia is null ? null : intencion.RadioMetros,
+            RadioMetrosMaximo = radioMetros,
             SimilitudMinima = _options.SimilitudMinima
         };
 
-        var retrieval = Stopwatch.StartNew();
         var falloSemantico = false;
+        var usoFallback = false;
         IReadOnlyCollection<LugarCandidatoDto> lugares = Array.Empty<LugarCandidatoDto>();
 
-        using (var actividadRetrieval = _telemetry.IniciarActividad("asistente.retrieval", viajeId))
+        if (!sinSenal)
         {
-            try
+            var retrieval = Stopwatch.StartNew();
+
+            using (var actividadRetrieval = _telemetry.IniciarActividad("asistente.retrieval", viajeId))
             {
-                lugares = await _lugaresClient.BuscarSemanticoAsync(busqueda, cancellationToken);
+                try
+                {
+                    lugares = await _lugaresClient.BuscarSemanticoAsync(busqueda, cancellationToken);
+                }
+                catch (ServicioExternoNoDisponibleException)
+                {
+                    falloSemantico = true;
+                }
+
+                actividadRetrieval?.SetTag("asistente.fallo_semantico", falloSemantico);
             }
-            catch (ServicioExternoNoDisponibleException)
+
+            _telemetry.RegistrarEtapa("retrieval", retrieval.Elapsed, viajeId);
+
+            usoFallback = falloSemantico;
+
+            if (lugares.Count < _options.MinResultados)
             {
-                falloSemantico = true;
-            }
+                var catalogo = await _lugaresClient.BuscarAsync(
+                    barrio,
+                    categoriasBusqueda,
+                    cancellationToken);
 
-            actividadRetrieval?.SetTag("asistente.fallo_semantico", falloSemantico);
-        }
+                var filtrados = FiltrarFallback(catalogo, busqueda, idsExcluidos)
+                    .Where(lugar => DentroDelRadio(lugar, busqueda))
+                    .Take(_options.TopK)
+                    .ToList();
 
-        _telemetry.RegistrarEtapa("retrieval", retrieval.Elapsed, viajeId);
-
-        var usoFallback = falloSemantico;
-
-        if (lugares.Count < _options.MinResultados)
-        {
-            var catalogo = await _lugaresClient.BuscarAsync(
-                barrio,
-                categoriasBusqueda,
-                cancellationToken);
-
-            var filtrados = FiltrarFallback(catalogo, busqueda, idsExcluidos)
-                .Take(_options.TopK)
-                .ToList();
-
-            if (filtrados.Count > 0)
-            {
-                lugares = filtrados;
-                usoFallback = true;
+                if (filtrados.Count > 0)
+                {
+                    lugares = filtrados;
+                    usoFallback = true;
+                }
             }
         }
 
         var recomendaciones = lugares
+            .Take(_options.TopK)
             .Select(MapearRecomendacion)
             .ToList();
 
         var accion = ConstruirAccion(intencion, recomendaciones, itinerario, puedeAplicar);
 
-        var mensajeRespuesta = ConstruirMensaje(
-            intencion,
-            recomendaciones.Count,
-            itinerario?.NumeroDia ?? request.NumeroDia);
+        var mensajeRespuesta = sinSenal
+            ? "No pude interpretar tu pedido. Contame qué tipo de lugar buscás: café, museo, bar, parque o restaurante."
+            : ConstruirMensaje(
+                intencion,
+                recomendaciones.Count,
+                itinerario?.NumeroDia ?? request.NumeroDia);
 
-        if (_options.LlmGenerarMensaje && recomendaciones.Count > 0)
+        if (_options.LlmGenerarMensaje)
         {
             var contextoMensaje = new MensajeLlmContextoDto
             {
@@ -233,7 +261,8 @@ public class AsistenteService : IAsistenteService
                 Accion = intencion.Accion,
                 ParadaObjetivo = intencion.ParadaObjetivo?.Nombre,
                 NumeroDia = itinerario?.NumeroDia ?? request.NumeroDia,
-                Recomendaciones = recomendaciones
+                Recomendaciones = recomendaciones,
+                SinSenal = sinSenal
             };
 
             var mensajeLlm = await _mensajeLlmService.GenerarAsync(
@@ -259,11 +288,13 @@ public class AsistenteService : IAsistenteService
                 : null
         };
 
-        var estado = recomendaciones.Count == 0
-            ? "sin_resultados"
-            : usoFallback
-                ? "fallback"
-                : "ok";
+        var estado = sinSenal
+            ? "sin_senal"
+            : recomendaciones.Count == 0
+                ? "sin_resultados"
+                : usoFallback
+                    ? "fallback"
+                    : "ok";
 
         actividad?.SetTag("asistente.resultado", estado);
         actividad?.SetTag("asistente.recomendaciones", recomendaciones.Count);
@@ -287,8 +318,7 @@ public class AsistenteService : IAsistenteService
             return true;
         }
 
-        return string.Equals(intencion.QuerySemantica, "lugar", StringComparison.Ordinal)
-            && intencion.Filtros.CategoriaCodigos.Count == 0
+        return intencion.Filtros.CategoriaCodigos.Count == 0
             && intencion.Filtros.SoloAlAireLibre is null
             && intencion.Filtros.SoloBajoTecho is null
             && intencion.Filtros.AptoNinos is null
@@ -413,11 +443,61 @@ public class AsistenteService : IAsistenteService
         return ids;
     }
 
+    private async Task<LugarCandidatoDto?> ObtenerReferenciaSolicitadaAsync(
+        Guid? referenciaLugarId,
+        CancellationToken cancellationToken)
+    {
+        if (!referenciaLugarId.HasValue)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await _lugaresClient.ObtenerPorIdAsync(
+                referenciaLugarId.Value,
+                cancellationToken);
+        }
+        catch (ServicioExternoNoDisponibleException)
+        {
+            return null;
+        }
+    }
+
+    private bool DentroDelRadio(
+        LugarCandidatoDto lugar,
+        BusquedaSemanticaLugaresDto busqueda)
+    {
+        if (!busqueda.LatitudReferencia.HasValue
+            || !busqueda.LongitudReferencia.HasValue
+            || !busqueda.RadioMetrosMaximo.HasValue
+            || busqueda.RadioMetrosMaximo.Value <= 0)
+        {
+            return true;
+        }
+
+        var metros = _geo.DistanciaMetros(
+            (double)busqueda.LatitudReferencia.Value,
+            (double)busqueda.LongitudReferencia.Value,
+            (double)lugar.Latitud,
+            (double)lugar.Longitud);
+
+        return metros <= busqueda.RadioMetrosMaximo.Value;
+    }
+
     private static LugarCandidatoDto? ObtenerReferenciaCercania(
         IntencionAsistenteDto intencion,
-        IReadOnlyList<ParadaActual> paradasActuales)
+        IReadOnlyList<ParadaActual> paradasActuales,
+        LugarCandidatoDto? referenciaSolicitada,
+        bool buscarReferenciaSolicitada)
     {
-        if (!intencion.RadioMetros.HasValue || paradasActuales.Count == 0)
+        if (referenciaSolicitada is not null)
+        {
+            return referenciaSolicitada;
+        }
+
+        if ((!buscarReferenciaSolicitada && !intencion.RadioMetros.HasValue)
+            || paradasActuales.Count == 0)
         {
             return null;
         }
@@ -453,6 +533,13 @@ public class AsistenteService : IAsistenteService
 
         if (intencion.Accion == TipoAccionAsistente.Reemplazar
             && intencion.ParadaObjetivo is null)
+        {
+            return null;
+        }
+
+        if (intencion.Accion == TipoAccionAsistente.Agregar
+            && intencion.Filtros.Turno is { } turno
+            && itinerario.Paradas.Any(parada => parada.Turno == turno))
         {
             return null;
         }

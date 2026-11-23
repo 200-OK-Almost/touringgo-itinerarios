@@ -56,11 +56,14 @@ public class MensajeLlmServiceTests
     }
 
     [Fact]
-    public async Task GenerarAsync_SinRecomendaciones_NoLlamaAlModelo()
+    public async Task GenerarAsync_SinRecomendaciones_LlamaAlModeloYPideAclaracion()
     {
         var contexto = CrearContexto();
         contexto.Recomendaciones = Array.Empty<RecomendacionLugarDto>();
-        var cliente = new OllamaClientFalso(new MensajeLlmCrudo { Mensaje = "Hola" });
+        var cliente = new OllamaClientFalso(new MensajeLlmCrudo
+        {
+            Mensaje = "Contame qué tipo de lugar buscás."
+        });
         var service = CrearServicio(cliente, new AsistenteOptions
         {
             LlmGenerarMensaje = true
@@ -68,8 +71,31 @@ public class MensajeLlmServiceTests
 
         var mensaje = await service.GenerarAsync(contexto);
 
-        Assert.Null(mensaje);
-        Assert.False(cliente.FueLlamado);
+        Assert.Equal("Contame qué tipo de lugar buscás.", mensaje);
+        Assert.True(cliente.FueLlamado);
+        Assert.Contains("No hay recomendaciones disponibles", cliente.Prompt);
+        Assert.Contains("No recomiendes lugares específicos", cliente.Prompt);
+    }
+
+    [Fact]
+    public async Task GenerarAsync_SinSenal_IndicaRedirigirLaConversacion()
+    {
+        var contexto = CrearContexto();
+        contexto.Recomendaciones = Array.Empty<RecomendacionLugarDto>();
+        contexto.SinSenal = true;
+        var cliente = new OllamaClientFalso(new MensajeLlmCrudo
+        {
+            Mensaje = "Hola, contame qué lugar querés conocer."
+        });
+        var service = CrearServicio(cliente, new AsistenteOptions
+        {
+            LlmGenerarMensaje = true
+        });
+
+        var mensaje = await service.GenerarAsync(contexto);
+
+        Assert.Equal("Hola, contame qué lugar querés conocer.", mensaje);
+        Assert.Contains("no parece ser una consulta de lugares", cliente.Prompt);
     }
 
     [Fact]

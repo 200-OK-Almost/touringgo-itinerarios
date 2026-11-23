@@ -91,6 +91,39 @@ public class IntencionService : IIntencionService
         "cuarta", "cuarto", "quinta", "quinto", "ultima", "ultimo"
     };
 
+    private static readonly HashSet<string> SenalesDeViaje = new(StringComparer.Ordinal)
+    {
+        "cafe", "cafes", "cafeteria", "cafeterias",
+        "museo", "museos", "galeria", "galerias",
+        "parque", "parques", "plaza", "plazas",
+        "aire", "libre", "libreria", "librerias", "libro", "libros",
+        "bar", "bares", "vermu", "vermut",
+        "restaurante", "restaurantes", "comida", "gastronomia",
+        "cocteleria", "coctelerias", "coctel", "cocteles", "trago", "tragos",
+        "comer", "cenar", "almorzar", "merendar", "desayunar", "tomar",
+        "caminar", "caminando", "paseo", "caminata",
+        "romantico", "romantica", "romanticos", "romanticas",
+        "tranquilo", "tranquila", "tranquilos", "tranquilas",
+        "divertido", "divertida", "lindo", "linda", "lindos", "lindas",
+        "naturaleza", "arte", "cultura", "musica",
+        "vegano", "vegana", "vegetariano", "vegetariana",
+        "celiaco", "celiaca", "kosher", "halal", "gluten", "tacc", "lactosa",
+        "ninos", "ninas", "familia", "chicos", "chicas", "infantil",
+        "accesible", "silla", "ruedas", "movilidad", "reducida", "discapacidad",
+        "economico", "economica","barato", "barata",
+        "equilibrado", "equilibrada", "moderado", "moderada", "caro", "cara", "presupuesto",
+        "manana", "mediodia", "tarde", "noche",
+        "cerca", "cercano", "cercana", "cercanos", "cercanas",
+        "proximo", "proxima", "proximos", "proximas",
+        "bajo", "techo", "lluvia", "adentro", "cubierto", "outdoor", "afuera"
+    };
+
+    private static readonly HashSet<string> PalabrasSinSenal = new(StringComparer.Ordinal)
+    {
+        "hola", "buenas", "buenos", "dias", "tardes", "noches",
+        "gracias", "chau", "adios", "hasta", "luego", "ok", "dale"
+    };
+
     private static readonly HashSet<string> PalabrasIgnoradasQuery = new(PalabrasIgnoradas, StringComparer.Ordinal)
     {
         "cerca", "cercano", "cercana", "cercanos", "cercanas",
@@ -131,6 +164,39 @@ public class IntencionService : IIntencionService
         var sinSignos = Regex.Replace(sinTildes, @"[^a-z0-9\s]", " ");
 
         return Regex.Replace(sinSignos, @"\s+", " ").Trim();
+    }
+
+    public bool TieneSenalDeViaje(string? mensaje)
+    {
+        var normalizado = Normalizar(mensaje);
+
+        if (string.IsNullOrEmpty(normalizado))
+        {
+            return false;
+        }
+
+        var tokens = Regex.Split(normalizado, @"\s+");
+
+        if (tokens.All(token => PalabrasSinSenal.Contains(token)))
+        {
+            return false;
+        }
+
+        if (tokens.Any(token => SenalesDeViaje.Contains(token)))
+        {
+            return true;
+        }
+
+        var filtros = ExtraerFiltros(normalizado);
+
+        return filtros.CategoriaCodigos.Count > 0
+            || filtros.SoloAlAireLibre == true
+            || filtros.SoloBajoTecho == true
+            || filtros.AptoNinos == true
+            || filtros.AccesibleMovilidadReducida == true
+            || !string.IsNullOrWhiteSpace(filtros.RestriccionDietaria)
+            || filtros.Turno.HasValue
+            || filtros.NivelPrecioMaximo.HasValue;
     }
 
     public TipoAccionAsistente DetectarAccion(string? mensaje)
@@ -201,7 +267,7 @@ public class IntencionService : IIntencionService
 
         return coincidencias.Count switch
         {
-            0 => CrearAclaracion(ordenadas),
+            0 => CrearAclaracion(ordenadas, string.Join(" ", tokens)),
             1 => Resolver(coincidencias[0]),
             _ => CrearAclaracion(coincidencias)
         };
@@ -524,11 +590,14 @@ public class IntencionService : IIntencionService
     };
 
     private static ResolucionParadaObjetivoDto CrearAclaracion(
-        IEnumerable<ParadaResolubleDto> paradas) => new()
+        IEnumerable<ParadaResolubleDto> paradas,
+        string? terminoBuscado = null) => new()
     {
         Aclaracion = new AclaracionDto
         {
-            Pregunta = "¿A cuál parada te referís?",
+            Pregunta = string.IsNullOrWhiteSpace(terminoBuscado)
+                ? "¿A cuál parada te referís?"
+                : $"No encontré \"{terminoBuscado.Trim()}\". ¿A cuál parada te referís?",
             Opciones = paradas
                 .Select(parada => new OpcionAclaracionDto
                 {

@@ -115,6 +115,27 @@ public class ViajesController : ControllerBase
         CancellationToken cancellationToken)
         => Ok(await _itinerarioService.ObtenerAsync(id, _currentUser.UsuarioId, cancellationToken));
 
+    [HttpDelete("{id:guid}/itinerario/paradas/{paradaId:guid}")]
+    [AsistenteRateLimit(AsistenteRateLimitPolicies.Viaje)]
+    [ProducesResponseType(typeof(IReadOnlyCollection<ItinerarioResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<IReadOnlyCollection<ItinerarioResponseDto>>> EliminarParada(
+        Guid id,
+        Guid paradaId,
+        [FromQuery] short numeroDia,
+        [FromQuery] string version,
+        CancellationToken cancellationToken)
+        => Ok(await _itinerarioService.EliminarParadaAsync(
+            id,
+            numeroDia,
+            paradaId,
+            version,
+            _currentUser.UsuarioId,
+            cancellationToken));
+
     [HttpPost("{id:guid}/asistente")]
     [AsistenteRateLimit(AsistenteRateLimitPolicies.Viaje)]
     [RequestSizeLimit(32 * 1024)]

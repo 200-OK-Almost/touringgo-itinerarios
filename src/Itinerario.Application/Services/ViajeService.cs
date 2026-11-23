@@ -48,7 +48,7 @@ public class ViajeService : IViajeService
                 await _repository.AgregarAsync(viaje, cancellationToken);
                 await _repository.GuardarCambiosAsync(cancellationToken);
 
-                return MapearRespuesta(viaje);
+                return MapearRespuesta(viaje, creadoPorUsuarioId);
             }
             catch (CodigoInvitacionDuplicadoException)
             {
@@ -68,7 +68,7 @@ public class ViajeService : IViajeService
             throw new NotFoundException($"No se encontró el viaje con id {id}.");
         }
 
-        return MapearRespuesta(viaje);
+        return MapearRespuesta(viaje, usuarioId);
     }
 
     public async Task<ResultadoPaginadoDto<ViajeResponseDto>> ObtenerTodosAsync(
@@ -85,7 +85,9 @@ public class ViajeService : IViajeService
 
         return new ResultadoPaginadoDto<ViajeResponseDto>
         {
-            Items = resultado.Items.Select(MapearRespuesta).ToList(),
+            Items = resultado.Items
+                .Select(viaje => MapearRespuesta(viaje, usuarioId))
+                .ToList(),
             Total = resultado.Total,
             Pagina = paginaNormalizada,
             Tamano = tamanoNormalizado
@@ -116,7 +118,7 @@ public class ViajeService : IViajeService
         _repository.EstablecerParametrosFamilia(viaje, MapearParametrosFamilia(dto.ParametrosFamilia));
         await _repository.GuardarCambiosAsync(cancellationToken);
 
-        return MapearRespuesta(viaje);
+        return MapearRespuesta(viaje, usuarioIdSolicitante);
     }
 
     public async Task EliminarAsync(Guid id, Guid usuarioIdSolicitante, CancellationToken cancellationToken = default)
@@ -153,7 +155,7 @@ public class ViajeService : IViajeService
             await _repository.GuardarCambiosAsync(cancellationToken);
         }
 
-        return MapearRespuesta(viaje);
+        return MapearRespuesta(viaje, usuarioId);
     }
 
     private async Task<Viaje> ObtenerEntidadAsync(Guid id, CancellationToken cancellationToken)
@@ -428,7 +430,7 @@ public class ViajeService : IViajeService
                 RequiereMenuInfantil = dto.RequiereMenuInfantil
             };
 
-    private static ViajeResponseDto MapearRespuesta(Viaje viaje) => new()
+    private static ViajeResponseDto MapearRespuesta(Viaje viaje, Guid usuarioId) => new()
     {
         Id = viaje.Id,
         Titulo = viaje.Titulo,
@@ -449,6 +451,7 @@ public class ViajeService : IViajeService
         LongitudPartida = viaje.LongitudPartida,
         CodigoInvitacion = viaje.CodigoInvitacion,
         CreadoPorUsuarioId = viaje.CreadoPorUsuarioId,
+        PuedeEditar = viaje.EsAdministrador(usuarioId),
         FechaCreacion = viaje.FechaCreacion,
         FechaActualizacion = viaje.FechaActualizacion,
         CategoriaCodigos = viaje.Etiquetas.Select(e => e.CategoriaCodigo).ToList(),
