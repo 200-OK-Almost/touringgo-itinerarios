@@ -100,6 +100,63 @@ public class MensajeLlmServiceTests
     }
 
     [Fact]
+    public async Task GenerarAsync_SinResultadosEnBarrioConCategoria_NoPideTipo()
+    {
+        var contexto = CrearContexto();
+        contexto.Recomendaciones = Array.Empty<RecomendacionLugarDto>();
+        contexto.Barrio = BarrioCaba.PuertoMadero;
+        contexto.Filtros = new FiltrosIntencionDto
+        {
+            CategoriaCodigos = new[] { "cafe_especialidad" }
+        };
+        contexto.SinResultadosEnBarrio = true;
+        var cliente = new OllamaClientFalso(new MensajeLlmCrudo
+        {
+            Mensaje = "No encontré cafeterías en Puerto Madero. ¿Querés ampliar la búsqueda?"
+        });
+        var service = CrearServicio(cliente, new AsistenteOptions
+        {
+            LlmGenerarMensaje = true
+        });
+
+        var mensaje = await service.GenerarAsync(contexto);
+
+        Assert.NotNull(mensaje);
+        Assert.Contains(
+            "No hay recomendaciones disponibles para cafe_especialidad en Puerto Madero",
+            cliente.Prompt);
+        Assert.Contains("No preguntes el tipo de lugar ni el barrio", cliente.Prompt);
+        Assert.Contains("Sin resultados en barrio: sí", cliente.Prompt);
+        Assert.DoesNotContain("pedile al usuario que aclare", cliente.Prompt);
+    }
+
+    [Fact]
+    public async Task GenerarAsync_BusquedaAmpliada_IndicaOtrosBarrios()
+    {
+        var contexto = CrearContexto();
+        contexto.Barrio = BarrioCaba.PuertoMadero;
+        contexto.Filtros = new FiltrosIntencionDto
+        {
+            CategoriaCodigos = new[] { "cafe_especialidad" }
+        };
+        contexto.BusquedaAmpliada = true;
+        var cliente = new OllamaClientFalso(new MensajeLlmCrudo
+        {
+            Mensaje = "No había cafeterías en Puerto Madero; te muestro opciones cercanas."
+        });
+        var service = CrearServicio(cliente, new AsistenteOptions
+        {
+            LlmGenerarMensaje = true
+        });
+
+        var mensaje = await service.GenerarAsync(contexto);
+
+        Assert.NotNull(mensaje);
+        Assert.Contains("mostrás opciones de otros barrios", cliente.Prompt);
+        Assert.Contains("Búsqueda ampliada: sí", cliente.Prompt);
+    }
+
+    [Fact]
     public async Task GenerarAsync_MensajeVacio_DevuelveNullYRegistraError()
     {
         var cliente = new OllamaClientFalso(new MensajeLlmCrudo { Mensaje = "   " });

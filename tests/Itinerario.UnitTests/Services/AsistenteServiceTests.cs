@@ -579,6 +579,60 @@ public class AsistenteServiceTests
     }
 
     [Fact]
+    public async Task ResponderAsync_ContextoLlmIncluyeBarrioCategoriaYAmpliacion()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        viaje.LatitudPartida = -34.58m;
+        viaje.LongitudPartida = -58.42m;
+        var cerca = TestData.CrearLugar("Cafe cerca");
+        var lejos = TestData.CrearLugar("Cafe lejos");
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = Array.Empty<LugarCandidatoDto>(),
+            ResultadoCatalogo = Array.Empty<LugarCandidatoDto>(),
+            ResultadoSemanticoSinBarrio = new[] { cerca, lejos }
+        };
+        lugares.ResultadosSemanticosPorBarrio[BarrioCaba.PuertoMadero] =
+            Array.Empty<LugarCandidatoDto>();
+
+        var mensajeLlm = new MensajeLlmServiceFalso
+        {
+            Respuesta = "No había cafeterías en Puerto Madero; te muestro opciones cercanas."
+        };
+        var service = CrearServicio(
+            viaje,
+            lugares,
+            new TelemetriaFalsa(),
+            new AsistenteOptions
+            {
+                TopK = 5,
+                MinResultados = 2,
+                RadioMetrosDefault = 800,
+                LlmGenerarMensaje = true
+            },
+            mensajeLlm: mensajeLlm);
+
+        await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Recomendame un cafe en Puerto Madero",
+                NumeroDia = 1
+            },
+            admin);
+
+        Assert.True(mensajeLlm.FueLlamado);
+        Assert.NotNull(mensajeLlm.Contexto);
+        Assert.Equal(BarrioCaba.PuertoMadero, mensajeLlm.Contexto!.Barrio);
+        Assert.Contains(
+            "cafe_especialidad",
+            mensajeLlm.Contexto.Filtros.CategoriaCodigos);
+        Assert.True(mensajeLlm.Contexto.BusquedaAmpliada);
+        Assert.True(mensajeLlm.Contexto.SinResultadosEnBarrio);
+    }
+
+    [Fact]
     public async Task ResponderAsync_MensajeCerca_DefineRadioYReferencia()
     {
         var admin = Guid.NewGuid();

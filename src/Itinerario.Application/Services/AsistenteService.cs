@@ -203,6 +203,7 @@ public class AsistenteService : IAsistenteService
         var falloSemantico = false;
         var usoFallback = false;
         var busquedaAmpliada = false;
+        var sinResultadosEnBarrio = false;
         IReadOnlyCollection<LugarCandidatoDto> lugares = Array.Empty<LugarCandidatoDto>();
 
         if (!sinSenal)
@@ -248,6 +249,8 @@ public class AsistenteService : IAsistenteService
 
             if (lugares.Count == 0)
             {
+                sinResultadosEnBarrio = true;
+
                 var busquedaAmplia = new BusquedaSemanticaLugaresDto
                 {
                     Query = busqueda.Query,
@@ -314,6 +317,10 @@ public class AsistenteService : IAsistenteService
                 Accion = intencion.Accion,
                 ParadaObjetivo = intencion.ParadaObjetivo?.Nombre,
                 NumeroDia = itinerario?.NumeroDia ?? request.NumeroDia,
+                Barrio = barrioBusqueda,
+                Filtros = intencion.Filtros,
+                BusquedaAmpliada = busquedaAmpliada,
+                SinResultadosEnBarrio = sinResultadosEnBarrio,
                 Historial = request.Historial ?? Array.Empty<MensajeHistorialDto>(),
                 Recomendaciones = recomendaciones,
                 SinSenal = sinSenal
