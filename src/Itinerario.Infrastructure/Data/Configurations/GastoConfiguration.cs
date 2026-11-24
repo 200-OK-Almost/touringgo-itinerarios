@@ -12,7 +12,7 @@ public class GastoConfiguration : IEntityTypeConfiguration<Gasto>
         {
             t.HasCheckConstraint(
                 "ck_gastos_monto_total",
-                """"Monto" > 0"""");
+                """ "Monto" > 0 """);
 
         });
 
@@ -29,7 +29,6 @@ public class GastoConfiguration : IEntityTypeConfiguration<Gasto>
         builder.Property(g => g.Moneda)
             .HasConversion<string>()
             .HasColumnType("char(3)")
-            .HasDefaultValue(TipoMoneda.ARS)
             .IsRequired();
 
         builder.Property(g => g.FechaGasto)
@@ -62,7 +61,16 @@ public class GastoConfiguration : IEntityTypeConfiguration<Gasto>
 
         builder.HasOne(g => g.Liquidacion)
             .WithMany(l => l.Gastos)
-            .HasForeignKey(g => g.LiquidacionId)
+            .HasForeignKey(g => new
+            {
+                g.LiquidacionId,
+                g.ViajeId
+            })
+            .HasPrincipalKey(l => new
+            {
+                l.Id,
+                l.ViajeId
+            })
             .OnDelete(DeleteBehavior.Restrict);
 
         // Índices

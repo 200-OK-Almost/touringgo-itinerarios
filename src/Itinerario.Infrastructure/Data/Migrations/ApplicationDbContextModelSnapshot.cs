@@ -50,11 +50,13 @@ namespace Itinerario.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("uq_division_gasto_participante");
 
+                    b.HasIndex("GastoId", "ViajeId");
+
                     b.HasIndex("ViajeId", "ParticipanteId");
 
                     b.ToTable("division_gastos", null, t =>
                         {
-                            t.HasCheckConstraint("ck_division_gastos_monto_asignado", """ "MontoAsignado" > 0""");
+                            t.HasCheckConstraint("ck_division_gastos_monto_asignado", " \"MontoAsignado\" > 0");
                         });
                 });
 
@@ -115,10 +117,9 @@ namespace Itinerario.Infrastructure.Data.Migrations
                     b.Property<Guid?>("LiquidacionId")
                         .HasColumnType("uuid");
 
-                    b.Property<int>("Moneda")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("char(3)")
-                        .HasDefaultValue(0);
+                    b.Property<string>("Moneda")
+                        .IsRequired()
+                        .HasColumnType("char(3)");
 
                     b.Property<decimal>("Monto")
                         .HasPrecision(12, 2)
@@ -142,13 +143,13 @@ namespace Itinerario.Infrastructure.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("LiquidacionId");
-
                     b.HasIndex("PagadoPorMiembroId")
                         .HasDatabaseName("ix_gastos_pagado_por");
 
                     b.HasIndex("RegistradoPorMiembroId")
                         .HasDatabaseName("ix_gastos_registrado_por");
+
+                    b.HasIndex("LiquidacionId", "ViajeId");
 
                     b.HasIndex("ViajeId", "FechaGasto")
                         .HasDatabaseName("ix_gastos_viaje_fecha");
@@ -160,7 +161,7 @@ namespace Itinerario.Infrastructure.Data.Migrations
 
                     b.ToTable("gastos", null, t =>
                         {
-                            t.HasCheckConstraint("ck_gastos_monto_total", """Monto > 0""");
+                            t.HasCheckConstraint("ck_gastos_monto_total", " \"Monto\" > 0 ");
                         });
                 });
 
@@ -236,11 +237,12 @@ namespace Itinerario.Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("now()");
 
+                    b.Property<string>("Moneda")
+                        .IsRequired()
+                        .HasColumnType("char(3)");
+
                     b.Property<Guid>("RealizadaPorUsuarioId")
                         .HasColumnType("uuid");
-
-                    b.Property<int>("TipoMoneda")
-                        .HasColumnType("char(3)");
 
                     b.Property<Guid>("ViajeId")
                         .HasColumnType("uuid");
@@ -255,7 +257,7 @@ namespace Itinerario.Infrastructure.Data.Migrations
 
                     b.ToTable("liquidaciones", null, t =>
                         {
-                            t.HasCheckConstraint("ck_liquidaciones_moneda", """length(trim("Moneda"::text)) = 3""");
+                            t.HasCheckConstraint("ck_liquidaciones_moneda", "length(trim(\"Moneda\"::text)) = 3");
                         });
                 });
 
@@ -402,12 +404,6 @@ namespace Itinerario.Infrastructure.Data.Migrations
                     b.Property<Guid>("DeParticipanteId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("DeParticipanteUsuarioId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("DeParticipanteViajeId")
-                        .HasColumnType("uuid");
-
                     b.Property<Guid>("LiquidacionId")
                         .HasColumnType("uuid");
 
@@ -429,15 +425,17 @@ namespace Itinerario.Infrastructure.Data.Migrations
                     b.HasIndex("LiquidacionId")
                         .HasDatabaseName("ix_transferencias_liquidacion");
 
-                    b.HasIndex("DeParticipanteViajeId", "DeParticipanteUsuarioId");
+                    b.HasIndex("LiquidacionId", "ViajeId");
+
+                    b.HasIndex("ViajeId", "AParticipanteId");
 
                     b.HasIndex("ViajeId", "DeParticipanteId");
 
                     b.ToTable("transferencias_liquidacion", null, t =>
                         {
-                            t.HasCheckConstraint("ck_transferencias_monto", """ "Monto" > 0""");
+                            t.HasCheckConstraint("ck_transferencias_monto", " \"Monto\" > 0");
 
-                            t.HasCheckConstraint("ck_transferencias_participantes", """ "DeParticipanteId" <> "AParticipanteId" """);
+                            t.HasCheckConstraint("ck_transferencias_participantes", " \"DeParticipanteId\" <> \"AParticipanteId\" ");
                         });
                 });
 
@@ -630,7 +628,8 @@ namespace Itinerario.Infrastructure.Data.Migrations
                 {
                     b.HasOne("Itinerario.Domain.Entities.Gasto", "Gasto")
                         .WithMany("Divisiones")
-                        .HasForeignKey("GastoId")
+                        .HasForeignKey("GastoId", "ViajeId")
+                        .HasPrincipalKey("Id", "ViajeId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -669,16 +668,17 @@ namespace Itinerario.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("Itinerario.Domain.Entities.Gasto", b =>
                 {
-                    b.HasOne("Itinerario.Domain.Entities.Liquidacion", "Liquidacion")
-                        .WithMany("Gastos")
-                        .HasForeignKey("LiquidacionId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("Itinerario.Domain.Entities.Viaje", "Viaje")
                         .WithMany("Gastos")
                         .HasForeignKey("ViajeId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Itinerario.Domain.Entities.Liquidacion", "Liquidacion")
+                        .WithMany("Gastos")
+                        .HasForeignKey("LiquidacionId", "ViajeId")
+                        .HasPrincipalKey("Id", "ViajeId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Itinerario.Domain.Entities.MiembroViaje", "PagadoPorMiembro")
                         .WithMany()
@@ -752,17 +752,18 @@ namespace Itinerario.Infrastructure.Data.Migrations
                 {
                     b.HasOne("Itinerario.Domain.Entities.Liquidacion", "Liquidacion")
                         .WithMany("Transferencias")
-                        .HasForeignKey("LiquidacionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Itinerario.Domain.Entities.MiembroViaje", "DeParticipante")
-                        .WithMany()
-                        .HasForeignKey("DeParticipanteViajeId", "DeParticipanteUsuarioId")
+                        .HasForeignKey("LiquidacionId", "ViajeId")
+                        .HasPrincipalKey("Id", "ViajeId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("Itinerario.Domain.Entities.MiembroViaje", "AParticipante")
+                        .WithMany()
+                        .HasForeignKey("ViajeId", "AParticipanteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Itinerario.Domain.Entities.MiembroViaje", "DeParticipante")
                         .WithMany()
                         .HasForeignKey("ViajeId", "DeParticipanteId")
                         .OnDelete(DeleteBehavior.Restrict)

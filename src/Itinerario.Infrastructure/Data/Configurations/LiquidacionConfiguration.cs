@@ -20,7 +20,6 @@ public class LiquidacionConfiguration : IEntityTypeConfiguration<Liquidacion>
         builder.Property(l => l.Moneda)
             .HasConversion<string>()
             .HasColumnType("char(3)")
-            .HasDefaultValue(TipoMoneda.ARS)
             .IsRequired();
 
         builder.Property(l => l.FechaLiquidacion)

@@ -23,7 +23,16 @@ public class DivisionGastoConfiguration
 
         builder.HasOne(d => d.Gasto)
             .WithMany(g => g.Divisiones)
-            .HasForeignKey(d => d.GastoId)
+            .HasForeignKey(d => new
+            {
+                d.GastoId,
+                d.ViajeId
+            })
+            .HasPrincipalKey(g => new
+            {
+                g.Id,
+                g.ViajeId
+            })
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasOne(d => d.Participante)

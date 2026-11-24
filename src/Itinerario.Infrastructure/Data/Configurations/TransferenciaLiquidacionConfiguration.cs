@@ -27,14 +27,24 @@ public class TransferenciaLiquidacionConfiguration : IEntityTypeConfiguration<Tr
 
         builder.HasOne(t => t.Liquidacion)
             .WithMany(l => l.Transferencias)
-            .HasForeignKey(t => t.LiquidacionId)
+            .HasForeignKey(t => new
+            {
+                t.LiquidacionId,
+                t.ViajeId
+            })
+            .HasPrincipalKey(l => new
+            {
+                l.Id,
+                l.ViajeId
+            })
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasOne(t => t.DeParticipante)
             .WithMany()
-            .HasForeignKey(t => new {
+            .HasForeignKey(t => new
+            {
                 t.ViajeId,
-                t.DeParticipanteId 
+                t.DeParticipanteId
             })
             .HasPrincipalKey(m => new
             {
@@ -45,9 +55,10 @@ public class TransferenciaLiquidacionConfiguration : IEntityTypeConfiguration<Tr
 
         builder.HasOne(t => t.AParticipante)
             .WithMany()
-            .HasForeignKey(t => new {
+            .HasForeignKey(t => new
+            {
                 t.ViajeId,
-                t.DeParticipanteId
+                t.AParticipanteId
             })
             .HasPrincipalKey(m => new
             {
