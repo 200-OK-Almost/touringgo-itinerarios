@@ -136,93 +136,56 @@ public class GastosService : IGastosService
         await _gastosRepository.GuardarCambiosAsync(ct);
     }
 
+
     public async Task<LiquidacionDto> LiquidarAsync(
         Guid viajeId,
         Guid usuarioActualId,
         LiquidarGastosRequestDto request,
         CancellationToken ct = default)
     {
-        await ValidarMiembroAsync(viajeId, usuarioActualId, ct);
-
-        var gastoIds = request.GastoIds
-            .Distinct()
-            .ToArray();
-
-        if (gastoIds.Length == 0)
-            throw new ArgumentException("Debe seleccionar al menos un gasto.");
-
-        LiquidacionDto? resultado = null;
-
-
-        var gastos = await _gastosRepository
-            .ObtenerPendientesParaLiquidarAsync(
-                viajeId,
-                gastoIds);
-
-        // También detecta IDs inexistentes, gastos de otro viaje
-        // y gastos que ya fueron liquidados.
-        if (gastos.Count != gastoIds.Length)
-        {
-            throw new InvalidOperationException(
-                "Uno o más gastos no existen, no pertenecen al viaje " +
-                "o ya fueron liquidados.");
-        }
-
-        var monedas = gastos
-            .Select(g => g.Moneda)
-            .Distinct()
-            .ToArray();
-
-        if (monedas.Length != 1)
-        {
-            throw new InvalidOperationException(
-                "No se pueden liquidar gastos de distintas monedas juntos.");
-        }
-
-        var moneda = monedas[0];
-
-        var saldos = CalcularSaldosDeGastos(gastos);
-
-        var transferencias = ConstruirTransferencias(saldos);
+        var datos = await PrepararLiquidacionAsync(
+            viajeId,
+            usuarioActualId,
+            request,
+            ct);
 
         var liquidacion = new Liquidacion
         {
             Id = Guid.NewGuid(),
             ViajeId = viajeId,
             RealizadaPorUsuarioId = usuarioActualId,
-            Moneda = moneda,
+            Moneda = datos.Moneda,
             FechaLiquidacion = DateTime.UtcNow,
-            Transferencias = transferencias
+            Transferencias = datos.Transferencias
         };
 
-        foreach (var gasto in gastos)
+        // Asociar todos los gastos a la liquidación.
+        foreach (var gasto in datos.Gastos)
         {
             gasto.LiquidacionId = liquidacion.Id;
         }
 
+        // Agregar la liquidación y persistir todos los cambios.
         _gastosRepository.AgregarLiquidacion(liquidacion);
 
-        await _gastosRepository.GuardarCambiosAsync();
+        await _gastosRepository.GuardarCambiosAsync(ct);
 
-        resultado = new LiquidacionDto
+        return new LiquidacionDto
         {
             Id = liquidacion.Id,
             ViajeId = liquidacion.ViajeId,
             RealizadaPorUsuarioId = liquidacion.RealizadaPorUsuarioId,
             Moneda = liquidacion.Moneda,
             FechaLiquidacion = liquidacion.FechaLiquidacion,
-            GastoIds = gastos.Select(g => g.Id).ToArray(),
-            Transferencias = liquidacion.Transferencias
-                .Select(t => new TransferenciaLiquidacionDto
-                {
-                    DeParticipanteId = t.DeParticipanteId,
-                    AParticipanteId = t.AParticipanteId,
-                    Monto = t.Monto
-                }).ToArray()
-        }; 
-        
 
-        return resultado!;
+            GastoIds = datos.Gastos
+                .Select(g => g.Id)
+                .ToArray(),
+
+            Transferencias = MapearTransferenciasDto(
+                liquidacion.Transferencias
+            )
+        };
     }
 
     public async Task<ResultadoPaginadoDto<GastoDto>> ListarAsync(
@@ -274,7 +237,7 @@ public class GastosService : IGastosService
     {
         await ValidarMiembroAsync(viajeId, usuarioActualId, ct);
 
-        if (Enum.IsDefined<TipoMoneda>(moneda))
+        if (!Enum.IsDefined<TipoMoneda>(moneda))
             throw new ArgumentException("Moneda inválida.");
 
         var pagado = await _gastosRepository
@@ -324,9 +287,103 @@ public class GastosService : IGastosService
         return MapearGastoDto(gasto);
     }
 
+    public async Task<PrevisualizacionLiquidacionDto>
+    PrevisualizarLiquidacionAsync(
+        Guid viajeId,
+        Guid usuarioActualId,
+        LiquidarGastosRequestDto request,
+        CancellationToken ct = default)
+    {
+        var datos = await PrepararLiquidacionAsync(
+            viajeId,
+            usuarioActualId,
+            request,
+            ct);
+
+        return new PrevisualizacionLiquidacionDto
+        {
+            ViajeId = viajeId,
+            Moneda = datos.Moneda,
+
+            GastoIds = datos.Gastos
+                .Select(g => g.Id)
+                .ToArray(),
+
+            Transferencias = MapearTransferenciasDto(
+                datos.Transferencias
+            )
+        };
+    }
+
     // -----------------------
     // Helpers
     // -----------------------
+
+    // Record para liquidación 
+    private sealed record DatosLiquidacion(
+        IReadOnlyList<Gasto> Gastos,
+        TipoMoneda Moneda,
+        List<TransferenciaLiquidacion> Transferencias
+    );
+    // Método compartido para preparar liquidación con o sin persistencia
+    private async Task<DatosLiquidacion> PrepararLiquidacionAsync(
+        Guid viajeId,
+        Guid usuarioActualId,
+        LiquidarGastosRequestDto request,
+        CancellationToken ct = default)
+    {
+        await ValidarMiembroAsync(viajeId, usuarioActualId, ct);
+
+        var gastoIds = request.GastoIds?.ToArray()
+            ?? throw new ArgumentException("Debe indicar los gastos.");
+
+        if (gastoIds.Length == 0)
+            throw new ArgumentException("Debe seleccionar al menos un gasto.");
+
+        if (gastoIds.Any(id => id == Guid.Empty))
+            throw new ArgumentException("Los IDs de los gastos no son válidos.");
+
+        if (gastoIds.Distinct().Count() != gastoIds.Length)
+            throw new ArgumentException("No puede haber gastos duplicados.");
+
+        var gastos = await _gastosRepository
+            .ObtenerPendientesParaLiquidarAsync(
+                viajeId,
+                gastoIds,
+                ct);
+
+        // Detecta gastos inexistentes, de otro viaje
+        // o que ya fueron liquidados.
+        if (gastos.Count != gastoIds.Length)
+        {
+            throw new InvalidOperationException(
+                "Uno o más gastos no existen, no pertenecen al viaje " +
+                "o ya fueron liquidados.");
+        }
+
+        var monedas = gastos
+            .Select(g => g.Moneda)
+            .Distinct()
+            .ToArray();
+
+        if (monedas.Length != 1)
+        {
+            throw new InvalidOperationException(
+                "No se pueden liquidar gastos de distintas monedas juntos.");
+        }
+
+        var moneda = monedas[0];
+
+        var saldos = CalcularSaldosDeGastos(gastos);
+
+        var transferencias = ConstruirTransferencias(saldos);
+
+        return new DatosLiquidacion(
+            gastos,
+            moneda,
+            transferencias
+        );
+    }
     private static GastoDto MapearGastoDto(Gasto gasto)
     {
         return new GastoDto
@@ -349,6 +406,19 @@ public class GastosService : IGastosService
             UsuarioId = d.ParticipanteId,
             MontoAsignado = d.MontoAsignado
         };
+    }
+
+    private static IReadOnlyCollection<TransferenciaLiquidacionDto>
+    MapearTransferenciasDto(
+        IEnumerable<TransferenciaLiquidacion> transferencias)
+    {
+        return transferencias.Select(t =>
+            new TransferenciaLiquidacionDto
+            {
+                DeParticipanteId = t.DeParticipanteId,
+                AParticipanteId = t.AParticipanteId,
+                Monto = t.Monto
+            }).ToArray();
     }
 
     private static List<DivisionGasto> ConstruirDivisiones(

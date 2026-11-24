@@ -163,4 +163,26 @@ public sealed class GastosController : ControllerBase
 
         return Ok(liquidacion);
     }
+
+    // POST /api/viajes/{viajeId}/gastos/liquidaciones/previsualizacion
+    [HttpPost("liquidaciones/previsualizacion")]
+    [ProducesResponseType(
+        typeof(LiquidacionDto),
+        StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<LiquidacionDto>> LiquidarPreview(
+        [FromRoute] Guid viajeId,
+        [FromBody] LiquidarGastosRequestDto request,
+        CancellationToken ct)
+    {
+
+        var liquidacionPreview = await _gastoService.PrevisualizarLiquidacionAsync(
+            viajeId,
+            _currentUser.UsuarioId,
+            request,
+            ct);
+
+        return Ok(liquidacionPreview);
+    }
+
 }

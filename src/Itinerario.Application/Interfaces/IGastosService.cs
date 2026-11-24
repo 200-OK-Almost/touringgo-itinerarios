@@ -46,4 +46,10 @@ public interface IGastosService
         Guid usuarioActualId,
         LiquidarGastosRequestDto request,
         CancellationToken ct = default);
+
+    public Task<PrevisualizacionLiquidacionDto> PrevisualizarLiquidacionAsync(
+        Guid viajeId,
+        Guid usuarioActualId,
+        LiquidarGastosRequestDto request,
+        CancellationToken ct = default);
 }
