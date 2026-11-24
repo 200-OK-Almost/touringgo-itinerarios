@@ -128,7 +128,7 @@ public class AsistenteServiceTests
             admin);
 
         Assert.Equal(2, respuesta.Recomendaciones.Count);
-        Assert.Contains("catálogo filtrado", respuesta.Advertencia);
+        Assert.Null(respuesta.Advertencia);
         Assert.Contains("fallback", telemetria.Resultados);
     }
 
@@ -150,7 +150,7 @@ public class AsistenteServiceTests
             admin);
 
         Assert.Single(respuesta.Recomendaciones);
-        Assert.Contains("No se pudo usar la búsqueda semántica", respuesta.Advertencia);
+        Assert.Null(respuesta.Advertencia);
     }
 
     [Fact]
@@ -781,7 +781,7 @@ public class AsistenteServiceTests
 
         var recomendacion = Assert.Single(respuesta.Recomendaciones);
         Assert.Equal(cerca.Id, recomendacion.LugarId);
-        Assert.NotNull(respuesta.Advertencia);
+        Assert.Null(respuesta.Advertencia);
     }
 
     [Fact]
@@ -1079,7 +1079,7 @@ public class AsistenteServiceTests
 
         Assert.Single(respuesta.Recomendaciones);
         Assert.Equal(vegano.Id, respuesta.Recomendaciones.Single().LugarId);
-        Assert.NotNull(respuesta.Advertencia);
+        Assert.Null(respuesta.Advertencia);
     }
 
     [Fact]
@@ -1239,7 +1239,7 @@ public class AsistenteServiceTests
 
         Assert.Single(respuesta.Recomendaciones);
         Assert.Equal(cubierto.Id, respuesta.Recomendaciones.Single().LugarId);
-        Assert.NotNull(respuesta.Advertencia);
+        Assert.Null(respuesta.Advertencia);
     }
 
     [Fact]

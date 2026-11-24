@@ -345,10 +345,6 @@ public class AsistenteService : IAsistenteService
             Accion = accion,
             Advertencia = busquedaAmpliada
                 ? ConstruirAdvertenciaAmpliada(categoriasBusqueda, barrioBusqueda)
-                : usoFallback
-                    ? falloSemantico
-                    ? "No se pudo usar la búsqueda semántica; se usó el catálogo filtrado."
-                    : "La búsqueda semántica no devolvió suficientes resultados; se usó el catálogo filtrado."
                 : null
         };
 
