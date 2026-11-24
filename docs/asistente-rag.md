@@ -98,7 +98,7 @@ Reglas:
 - cualquier miembro del viaje puede consultar;
 - si el usuario no es miembro, responde `404`;
 - si el asistente está deshabilitado, responde `404`;
-- si la búsqueda semántica falla o devuelve pocos resultados, usa el catálogo filtrado y devuelve `advertencia`;
+- si la búsqueda semántica falla o devuelve pocos resultados, usa el catálogo filtrado sin mostrar advertencia;
 - no aplica cambios en esta llamada;
 - `accion` solo se completa si el usuario es administrador, hay una recomendación, el itinerario tiene `version` y la intención es `Agregar` o `Reemplazar`;
 - el request acepta como máximo **32 KB**.

@@ -35,6 +35,7 @@ public class IntencionLlmServiceTests
         Assert.Contains(contexto.Paradas.Single().ParadaId.ToString(), cliente.Prompt);
         Assert.Contains("parques_aire_libre", cliente.Prompt);
         Assert.Contains("No inventes lugares", cliente.Prompt);
+        Assert.Contains("Quiero algo en Palermo", cliente.Prompt);
         Assert.Contains("intent_llm", telemetria.Etapas);
         Assert.Contains("llm_ok", telemetria.Resultados);
     }
@@ -165,6 +166,14 @@ public class IntencionLlmServiceTests
         Barrio = BarrioCaba.Palermo,
         NivelPresupuesto = NivelPresupuesto.Equilibrado,
         CategoriasViaje = new[] { "museos_galerias" },
+        Historial = new[]
+        {
+            new MensajeHistorialDto
+            {
+                Rol = "user",
+                Contenido = "Quiero algo en Palermo"
+            }
+        },
         AptoNinos = true,
         AccesibleMovilidadReducida = false,
         Paradas = new[]

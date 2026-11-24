@@ -12,6 +12,7 @@ public class IntencionAsistenteDtoTests
 
         Assert.Equal(TipoAccionAsistente.Recomendar, intencion.Accion);
         Assert.Equal(string.Empty, intencion.QuerySemantica);
+        Assert.Null(intencion.Barrio);
         Assert.NotNull(intencion.Filtros);
         Assert.Empty(intencion.Filtros.CategoriaCodigos);
         Assert.Null(intencion.ParadaObjetivo);

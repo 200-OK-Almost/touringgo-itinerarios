@@ -95,11 +95,13 @@ public class AsistenteService : IAsistenteService
             })
             .ToList();
 
-        var intencion = _intencionService.Interpretar(
-            mensaje,
-            paradasResolubles,
-            _options.RadioMetrosDefault);
         var sinSenal = !_intencionService.TieneSenalDeViaje(mensaje);
+        var intencion = InterpretarConHistorial(
+            mensaje,
+            request.Historial,
+            paradasResolubles,
+            sinSenal);
+        var barrioBusqueda = intencion.Barrio ?? barrio;
 
         var puedeAplicar = viaje.EsAdministrador(usuarioIdSolicitante);
 
@@ -112,10 +114,11 @@ public class AsistenteService : IAsistenteService
                 viajeId,
                 mensaje,
                 itinerario?.NumeroDia ?? request.NumeroDia,
-                barrio,
+                barrioBusqueda,
                 categoriasViaje,
                 viaje,
                 paradasResolubles,
+                request.Historial,
                 intencion);
 
             var crudo = await _intencionLlmService.InterpretarAsync(
@@ -126,9 +129,12 @@ public class AsistenteService : IAsistenteService
 
             if (intencionLlm is not null)
             {
+                intencionLlm.Barrio ??= intencion.Barrio;
                 intencion = intencionLlm;
             }
         }
+
+        barrioBusqueda = intencion.Barrio ?? barrio;
 
         if (intencion.Aclaracion is not null)
         {
@@ -167,12 +173,15 @@ public class AsistenteService : IAsistenteService
                 ?? (request.ReferenciaLugarId.HasValue
                     ? _options.RadioMetrosDefault
                     : null);
+        var puntoOrden = referencia is not null
+            ? ((double)referencia.Latitud, (double)referencia.Longitud)
+            : ObtenerPuntoReferencia(itinerario, viaje);
 
         var busqueda = new BusquedaSemanticaLugaresDto
         {
             Query = intencion.QuerySemantica,
             Cantidad = _options.TopK,
-            Barrio = barrio,
+            Barrio = barrioBusqueda,
             CategoriaCodigos = categoriasBusqueda.Count > 0 ? categoriasBusqueda : null,
             NivelPrecioMaximo = presupuestoMaximo,
             SoloAlAireLibre = intencion.Filtros.SoloAlAireLibre,
@@ -194,6 +203,8 @@ public class AsistenteService : IAsistenteService
 
         var falloSemantico = false;
         var usoFallback = false;
+        var busquedaAmpliada = false;
+        var sinResultadosEnBarrio = false;
         IReadOnlyCollection<LugarCandidatoDto> lugares = Array.Empty<LugarCandidatoDto>();
 
         if (!sinSenal)
@@ -221,7 +232,7 @@ public class AsistenteService : IAsistenteService
             if (lugares.Count < _options.MinResultados)
             {
                 var catalogo = await _lugaresClient.BuscarAsync(
-                    barrio,
+                    barrioBusqueda,
                     categoriasBusqueda,
                     cancellationToken);
 
@@ -236,6 +247,52 @@ public class AsistenteService : IAsistenteService
                     usoFallback = true;
                 }
             }
+
+            if (lugares.Count == 0)
+            {
+                sinResultadosEnBarrio = true;
+
+                var busquedaAmplia = new BusquedaSemanticaLugaresDto
+                {
+                    Query = busqueda.Query,
+                    Cantidad = Math.Max(_options.TopK, 20),
+                    Barrio = null,
+                    CategoriaCodigos = busqueda.CategoriaCodigos,
+                    NivelPrecioMaximo = busqueda.NivelPrecioMaximo,
+                    SoloAlAireLibre = busqueda.SoloAlAireLibre,
+                    SoloBajoTecho = busqueda.SoloBajoTecho,
+                    AptoNinos = busqueda.AptoNinos,
+                    AccesibleMovilidadReducida = busqueda.AccesibleMovilidadReducida,
+                    RestriccionDietaria = busqueda.RestriccionDietaria,
+                    ExcluirIds = busqueda.ExcluirIds,
+                    LatitudReferencia = busqueda.LatitudReferencia,
+                    LongitudReferencia = busqueda.LongitudReferencia,
+                    RadioMetrosMaximo = null,
+                    SimilitudMinima = busqueda.SimilitudMinima
+                };
+
+                try
+                {
+                    var ampliados = await _lugaresClient.BuscarSemanticoAsync(
+                        busquedaAmplia,
+                        cancellationToken);
+
+                    if (ampliados.Count > 0)
+                    {
+                        lugares = OrdenarPorDistancia(
+                                ampliados,
+                                puntoOrden)
+                            .Take(_options.TopK)
+                            .ToList();
+                        busquedaAmpliada = true;
+                        usoFallback = false;
+                    }
+                }
+                catch (ServicioExternoNoDisponibleException)
+                {
+                    falloSemantico = true;
+                }
+            }
         }
 
         var recomendaciones = lugares
@@ -246,7 +303,7 @@ public class AsistenteService : IAsistenteService
         var accion = ConstruirAccion(intencion, recomendaciones, itinerario, puedeAplicar);
 
         var mensajeRespuesta = sinSenal
-            ? "No pude interpretar tu pedido. Contame qué tipo de lugar buscás: café, museo, bar, parque o restaurante."
+            ? ConstruirMensajeSinSenal(mensaje)
             : ConstruirMensaje(
                 intencion,
                 recomendaciones.Count,
@@ -261,6 +318,11 @@ public class AsistenteService : IAsistenteService
                 Accion = intencion.Accion,
                 ParadaObjetivo = intencion.ParadaObjetivo?.Nombre,
                 NumeroDia = itinerario?.NumeroDia ?? request.NumeroDia,
+                Barrio = barrioBusqueda,
+                Filtros = intencion.Filtros,
+                BusquedaAmpliada = busquedaAmpliada,
+                SinResultadosEnBarrio = sinResultadosEnBarrio,
+                Historial = request.Historial ?? Array.Empty<MensajeHistorialDto>(),
                 Recomendaciones = recomendaciones,
                 SinSenal = sinSenal
             };
@@ -281,20 +343,20 @@ public class AsistenteService : IAsistenteService
             PuedeAplicar = puedeAplicar,
             Recomendaciones = recomendaciones,
             Accion = accion,
-            Advertencia = usoFallback
-                ? falloSemantico
-                    ? "No se pudo usar la búsqueda semántica; se usó el catálogo filtrado."
-                    : "La búsqueda semántica no devolvió suficientes resultados; se usó el catálogo filtrado."
+            Advertencia = busquedaAmpliada
+                ? ConstruirAdvertenciaAmpliada(categoriasBusqueda, barrioBusqueda)
                 : null
         };
 
         var estado = sinSenal
             ? "sin_senal"
-            : recomendaciones.Count == 0
-                ? "sin_resultados"
-                : usoFallback
-                    ? "fallback"
-                    : "ok";
+            : busquedaAmpliada
+                ? "ampliado"
+                : recomendaciones.Count == 0
+                    ? "sin_resultados"
+                    : usoFallback
+                        ? "fallback"
+                        : "ok";
 
         actividad?.SetTag("asistente.resultado", estado);
         actividad?.SetTag("asistente.recomendaciones", recomendaciones.Count);
@@ -303,6 +365,67 @@ public class AsistenteService : IAsistenteService
         _telemetry.RegistrarEtapa("total", total.Elapsed, viajeId);
 
         return resultado;
+    }
+
+    private IntencionAsistenteDto InterpretarConHistorial(
+        string mensaje,
+        IReadOnlyCollection<MensajeHistorialDto>? historial,
+        IReadOnlyCollection<ParadaResolubleDto> paradas,
+        bool sinSenal)
+    {
+        var intencion = _intencionService.Interpretar(
+            mensaje,
+            paradas,
+            _options.RadioMetrosDefault);
+
+        if (sinSenal || historial is not { Count: > 0 })
+        {
+            return intencion;
+        }
+
+        var necesitaCategoria = intencion.Filtros.CategoriaCodigos.Count == 0;
+        var necesitaBarrio = intencion.Barrio is null;
+
+        if (!necesitaCategoria && !necesitaBarrio)
+        {
+            return intencion;
+        }
+
+        foreach (var mensajeHistorial in historial.Reverse())
+        {
+            if (!string.Equals(
+                    mensajeHistorial.Rol,
+                    "user",
+                    StringComparison.OrdinalIgnoreCase)
+                || string.IsNullOrWhiteSpace(mensajeHistorial.Contenido))
+            {
+                continue;
+            }
+
+            var historica = _intencionService.Interpretar(
+                mensajeHistorial.Contenido,
+                paradas,
+                _options.RadioMetrosDefault);
+
+            if (necesitaCategoria && historica.Filtros.CategoriaCodigos.Count > 0)
+            {
+                intencion.Filtros.CategoriaCodigos = historica.Filtros.CategoriaCodigos;
+                necesitaCategoria = false;
+            }
+
+            if (necesitaBarrio && historica.Barrio is not null)
+            {
+                intencion.Barrio = historica.Barrio;
+                necesitaBarrio = false;
+            }
+
+            if (!necesitaCategoria && !necesitaBarrio)
+            {
+                break;
+            }
+        }
+
+        return intencion;
     }
 
     private static bool EsIntencionDebil(IntencionAsistenteDto intencion)
@@ -338,6 +461,7 @@ public class AsistenteService : IAsistenteService
         IReadOnlyCollection<string> categoriasViaje,
         Viaje viaje,
         IReadOnlyCollection<ParadaResolubleDto> paradas,
+        IReadOnlyCollection<MensajeHistorialDto>? historial,
         IntencionAsistenteDto intencion)
         => new()
         {
@@ -347,6 +471,7 @@ public class AsistenteService : IAsistenteService
             Barrio = barrio,
             NivelPresupuesto = viaje.NivelPresupuesto,
             CategoriasViaje = categoriasViaje,
+            Historial = historial ?? Array.Empty<MensajeHistorialDto>(),
             AptoNinos = intencion.Filtros.AptoNinos == true || RequiereAptoNinos(viaje),
             AccesibleMovilidadReducida =
                 intencion.Filtros.AccesibleMovilidadReducida == true
@@ -485,6 +610,74 @@ public class AsistenteService : IAsistenteService
         return metros <= busqueda.RadioMetrosMaximo.Value;
     }
 
+    private IEnumerable<LugarCandidatoDto> OrdenarPorDistancia(
+        IEnumerable<LugarCandidatoDto> lugares,
+        (double Lat, double Lon)? referencia)
+    {
+        if (referencia is null)
+        {
+            return lugares;
+        }
+
+        return lugares.OrderBy(lugar => _geo.DistanciaMetros(
+            referencia.Value.Lat,
+            referencia.Value.Lon,
+            (double)lugar.Latitud,
+            (double)lugar.Longitud));
+    }
+
+    private static (double Lat, double Lon)? ObtenerPuntoReferencia(
+        ItinerarioEntity? itinerario,
+        Viaje viaje)
+    {
+        if (itinerario?.OrigenLatitud is { } origenLat
+            && itinerario.OrigenLongitud is { } origenLon)
+        {
+            return ((double)origenLat, (double)origenLon);
+        }
+
+        if (viaje.LatitudPartida is { } partidaLat
+            && viaje.LongitudPartida is { } partidaLon)
+        {
+            return ((double)partidaLat, (double)partidaLon);
+        }
+
+        return null;
+    }
+
+    private static string ConstruirAdvertenciaAmpliada(
+        IReadOnlyCollection<string> categorias,
+        BarrioCaba barrio)
+    {
+        var categoria = categorias
+            .Select(NombreCategoria)
+            .FirstOrDefault(nombre => nombre is not null)
+            ?? "lugares";
+
+        return $"No encontré {categoria} en {FormatearBarrio(barrio)}. " +
+            "Te muestro opciones cercanas en otros barrios.";
+    }
+
+    private static string? NombreCategoria(string codigo) => codigo switch
+    {
+        "cafe_especialidad" => "cafeterías",
+        "museos_galerias" => "museos",
+        "parques_aire_libre" => "parques",
+        "librerias_diseno" => "librerías",
+        "bares_vermu" => "bares",
+        "gastronomia_clasica" => "restaurantes",
+        "cocteleria_autor" => "coctelerías",
+        _ => null
+    };
+
+    private static string FormatearBarrio(BarrioCaba barrio) => barrio switch
+    {
+        BarrioCaba.SanTelmo => "San Telmo",
+        BarrioCaba.SanNicolas => "San Nicolás",
+        BarrioCaba.PuertoMadero => "Puerto Madero",
+        _ => barrio.ToString()
+    };
+
     private static LugarCandidatoDto? ObtenerReferenciaCercania(
         IntencionAsistenteDto intencion,
         IReadOnlyList<ParadaActual> paradasActuales,
@@ -559,6 +752,23 @@ public class AsistenteService : IAsistenteService
                 : null,
             Version = itinerario.Version
         };
+    }
+
+    private static string ConstruirMensajeSinSenal(string mensaje)
+    {
+        if (mensaje.Contains("gracias", StringComparison.OrdinalIgnoreCase))
+        {
+            return "De nada. Si querés, puedo ayudarte a buscar otro lugar.";
+        }
+
+        if (mensaje.Contains("hola", StringComparison.OrdinalIgnoreCase)
+            || mensaje.Contains("buenas", StringComparison.OrdinalIgnoreCase)
+            || mensaje.Contains("buen dia", StringComparison.OrdinalIgnoreCase))
+        {
+            return "¡Hola! Contame qué tipo de lugar querés buscar.";
+        }
+
+        return "No pude interpretar tu pedido. Contame qué tipo de lugar buscás: café, museo, bar, parque o restaurante.";
     }
 
     private static string ConstruirMensaje(

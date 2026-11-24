@@ -128,7 +128,7 @@ public class AsistenteServiceTests
             admin);
 
         Assert.Equal(2, respuesta.Recomendaciones.Count);
-        Assert.Contains("catálogo filtrado", respuesta.Advertencia);
+        Assert.Null(respuesta.Advertencia);
         Assert.Contains("fallback", telemetria.Resultados);
     }
 
@@ -150,7 +150,7 @@ public class AsistenteServiceTests
             admin);
 
         Assert.Single(respuesta.Recomendaciones);
-        Assert.Contains("No se pudo usar la búsqueda semántica", respuesta.Advertencia);
+        Assert.Null(respuesta.Advertencia);
     }
 
     [Fact]
@@ -181,6 +181,455 @@ public class AsistenteServiceTests
         Assert.NotNull(busqueda.ExcluirIds);
         Assert.Contains(paradaActual.Id, busqueda.ExcluirIds!);
         Assert.Contains(viaje.LugarPartidaId!.Value, busqueda.ExcluirIds!);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_BarrioEnMensaje_UsaEseBarrioEnBusqueda()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = new[]
+            {
+                TestData.CrearLugar("Cafe"),
+                TestData.CrearLugar("Museo", "museos_galerias")
+            }
+        };
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Recomendame un cafe en Puerto Madero",
+                NumeroDia = 1
+            },
+            admin);
+
+        var busqueda = Assert.Single(lugares.Busquedas);
+        Assert.Equal(BarrioCaba.PuertoMadero, busqueda.Barrio);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_SinBarrio_UsaBarrioDelViaje()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = new[]
+            {
+                TestData.CrearLugar("Cafe"),
+                TestData.CrearLugar("Museo", "museos_galerias")
+            }
+        };
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Recomendame un cafe",
+                NumeroDia = 1
+            },
+            admin);
+
+        var busqueda = Assert.Single(lugares.Busquedas);
+        Assert.Equal(viaje.Barrio, busqueda.Barrio);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_BarrioEnMensaje_UsaEseBarrioEnFallback()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var cafe = TestData.CrearLugar("Cafe");
+        cafe.Barrio = BarrioCaba.Recoleta;
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = Array.Empty<LugarCandidatoDto>(),
+            ResultadoCatalogo = new[] { cafe }
+        };
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Recomendame un cafe en Recoleta",
+                NumeroDia = 1
+            },
+            admin);
+
+        var busqueda = Assert.Single(lugares.Busquedas);
+        Assert.Equal(BarrioCaba.Recoleta, busqueda.Barrio);
+        Assert.Equal(BarrioCaba.Recoleta, Assert.Single(lugares.BarriosCatalogo));
+    }
+
+    [Fact]
+    public async Task ResponderAsync_BarrioSePreservaCuandoRespondeElLlmDeIntencion()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = new[]
+            {
+                TestData.CrearLugar("Cafe"),
+                TestData.CrearLugar("Museo", "museos_galerias")
+            }
+        };
+        var intencionLlm = new IntencionLlmServiceFalso
+        {
+            Respuesta = new IntencionLlmCruda
+            {
+                Accion = "Recomendar",
+                QuerySemantica = "cafe",
+                Categorias = new List<string> { "cafe_especialidad" }
+            }
+        };
+        var service = CrearServicio(
+            viaje,
+            lugares,
+            new TelemetriaFalsa(),
+            new AsistenteOptions
+            {
+                TopK = 5,
+                MinResultados = 2,
+                RadioMetrosDefault = 800,
+                LlmEnabled = true
+            },
+            intencionLlm);
+
+        await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Quiero algo en Puerto Madero",
+                NumeroDia = 1
+            },
+            admin);
+
+        Assert.True(intencionLlm.FueLlamado);
+        var busqueda = Assert.Single(lugares.Busquedas);
+        Assert.Equal(BarrioCaba.PuertoMadero, busqueda.Barrio);
+        Assert.Equal("cafe", busqueda.Query);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_HistorialResuelveCategoriaParaBarrio()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = new[]
+            {
+                TestData.CrearLugar("Cafe"),
+                TestData.CrearLugar("Museo", "museos_galerias")
+            }
+        };
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "puerto madero",
+                NumeroDia = 1,
+                Historial = new[]
+                {
+                    new MensajeHistorialDto
+                    {
+                        Rol = "user",
+                        Contenido = "Recomendame un lugar para tomar cafe"
+                    }
+                }
+            },
+            admin);
+
+        var busqueda = Assert.Single(lugares.Busquedas);
+        Assert.Equal(BarrioCaba.PuertoMadero, busqueda.Barrio);
+        Assert.Contains("cafe_especialidad", busqueda.CategoriaCodigos!);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_HistorialResuelveBarrioParaCategoria()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = new[]
+            {
+                TestData.CrearLugar("Cafe"),
+                TestData.CrearLugar("Museo", "museos_galerias")
+            }
+        };
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "cafe",
+                NumeroDia = 1,
+                Historial = new[]
+                {
+                    new MensajeHistorialDto
+                    {
+                        Rol = "user",
+                        Contenido = "Quiero algo en Puerto Madero"
+                    }
+                }
+            },
+            admin);
+
+        var busqueda = Assert.Single(lugares.Busquedas);
+        Assert.Equal(BarrioCaba.PuertoMadero, busqueda.Barrio);
+        Assert.Contains("cafe_especialidad", busqueda.CategoriaCodigos!);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_HistorialNoPisaCategoriaNiBarrioActuales()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = new[]
+            {
+                TestData.CrearLugar("Museo", "museos_galerias"),
+                TestData.CrearLugar("Parque", "parques_aire_libre")
+            }
+        };
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Quiero un museo en Recoleta",
+                NumeroDia = 1,
+                Historial = new[]
+                {
+                    new MensajeHistorialDto
+                    {
+                        Rol = "user",
+                        Contenido = "Quiero un cafe en Puerto Madero"
+                    }
+                }
+            },
+            admin);
+
+        var busqueda = Assert.Single(lugares.Busquedas);
+        Assert.Equal(BarrioCaba.Recoleta, busqueda.Barrio);
+        Assert.Contains("museos_galerias", busqueda.CategoriaCodigos!);
+        Assert.DoesNotContain("cafe_especialidad", busqueda.CategoriaCodigos!);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_HistorialSeIncluyeEnContextoDelMensajeLlm()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = new[]
+            {
+                TestData.CrearLugar("Cafe"),
+                TestData.CrearLugar("Museo", "museos_galerias")
+            }
+        };
+        var mensajeLlm = new MensajeLlmServiceFalso
+        {
+            Respuesta = "Te recomiendo este cafe."
+        };
+        var historial = new[]
+        {
+            new MensajeHistorialDto
+            {
+                Rol = "user",
+                Contenido = "Quiero algo en Puerto Madero"
+            }
+        };
+        var service = CrearServicio(
+            viaje,
+            lugares,
+            new TelemetriaFalsa(),
+            new AsistenteOptions
+            {
+                TopK = 5,
+                MinResultados = 2,
+                RadioMetrosDefault = 800,
+                LlmGenerarMensaje = true
+            },
+            mensajeLlm: mensajeLlm);
+
+        await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "cafe",
+                NumeroDia = 1,
+                Historial = historial
+            },
+            admin);
+
+        Assert.True(mensajeLlm.FueLlamado);
+        Assert.NotNull(mensajeLlm.Contexto);
+        Assert.Same(historial, mensajeLlm.Contexto!.Historial);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_SinResultadosEnBarrio_AmpliaBusquedaYOrdenaPorDistancia()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        viaje.LatitudPartida = -34.58m;
+        viaje.LongitudPartida = -58.42m;
+
+        var lejos = TestData.CrearLugar(
+            "Cafe lejos",
+            latitud: -34.70m,
+            longitud: -58.50m);
+        var cerca = TestData.CrearLugar(
+            "Cafe cerca",
+            latitud: -34.581m,
+            longitud: -58.421m);
+
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = Array.Empty<LugarCandidatoDto>(),
+            ResultadoCatalogo = Array.Empty<LugarCandidatoDto>(),
+            ResultadoSemanticoSinBarrio = new[] { lejos, cerca }
+        };
+        lugares.ResultadosSemanticosPorBarrio[BarrioCaba.PuertoMadero] =
+            Array.Empty<LugarCandidatoDto>();
+
+        var service = CrearServicio(viaje, lugares, new TelemetriaFalsa());
+
+        var respuesta = await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Recomendame un cafe en Puerto Madero",
+                NumeroDia = 1
+            },
+            admin);
+
+        Assert.Equal(2, lugares.Busquedas.Count);
+        Assert.Equal(BarrioCaba.PuertoMadero, lugares.Busquedas[0].Barrio);
+        Assert.Null(lugares.Busquedas[1].Barrio);
+        Assert.Null(lugares.Busquedas[1].RadioMetrosMaximo);
+        Assert.Equal(BarrioCaba.PuertoMadero, Assert.Single(lugares.BarriosCatalogo));
+        Assert.Equal(cerca.Id, respuesta.Recomendaciones.First().LugarId);
+        Assert.NotNull(respuesta.Advertencia);
+        Assert.Contains("cafeterías", respuesta.Advertencia);
+        Assert.Contains("Puerto Madero", respuesta.Advertencia);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_BusquedaAmpliada_RespetaTopK()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        viaje.LatitudPartida = -34.58m;
+        viaje.LongitudPartida = -58.42m;
+
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = Array.Empty<LugarCandidatoDto>(),
+            ResultadoCatalogo = Array.Empty<LugarCandidatoDto>(),
+            ResultadoSemanticoSinBarrio = Enumerable.Range(1, 10)
+                .Select(numero => TestData.CrearLugar(
+                    $"Cafe {numero}",
+                    latitud: -34.58m - (numero * 0.001m),
+                    longitud: -58.42m))
+                .ToList()
+        };
+        lugares.ResultadosSemanticosPorBarrio[BarrioCaba.PuertoMadero] =
+            Array.Empty<LugarCandidatoDto>();
+
+        var service = CrearServicio(
+            viaje,
+            lugares,
+            new TelemetriaFalsa(),
+            new AsistenteOptions
+            {
+                TopK = 5,
+                MinResultados = 2,
+                RadioMetrosDefault = 800
+            });
+
+        var respuesta = await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Recomendame un cafe en Puerto Madero",
+                NumeroDia = 1
+            },
+            admin);
+
+        Assert.Equal(5, respuesta.Recomendaciones.Count);
+        Assert.Equal(
+            Math.Max(5, 20),
+            lugares.Busquedas[1].Cantidad);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_ContextoLlmIncluyeBarrioCategoriaYAmpliacion()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        viaje.LatitudPartida = -34.58m;
+        viaje.LongitudPartida = -58.42m;
+        var cerca = TestData.CrearLugar("Cafe cerca");
+        var lejos = TestData.CrearLugar("Cafe lejos");
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = Array.Empty<LugarCandidatoDto>(),
+            ResultadoCatalogo = Array.Empty<LugarCandidatoDto>(),
+            ResultadoSemanticoSinBarrio = new[] { cerca, lejos }
+        };
+        lugares.ResultadosSemanticosPorBarrio[BarrioCaba.PuertoMadero] =
+            Array.Empty<LugarCandidatoDto>();
+
+        var mensajeLlm = new MensajeLlmServiceFalso
+        {
+            Respuesta = "No había cafeterías en Puerto Madero; te muestro opciones cercanas."
+        };
+        var service = CrearServicio(
+            viaje,
+            lugares,
+            new TelemetriaFalsa(),
+            new AsistenteOptions
+            {
+                TopK = 5,
+                MinResultados = 2,
+                RadioMetrosDefault = 800,
+                LlmGenerarMensaje = true
+            },
+            mensajeLlm: mensajeLlm);
+
+        await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "Recomendame un cafe en Puerto Madero",
+                NumeroDia = 1
+            },
+            admin);
+
+        Assert.True(mensajeLlm.FueLlamado);
+        Assert.NotNull(mensajeLlm.Contexto);
+        Assert.Equal(BarrioCaba.PuertoMadero, mensajeLlm.Contexto!.Barrio);
+        Assert.Contains(
+            "cafe_especialidad",
+            mensajeLlm.Contexto.Filtros.CategoriaCodigos);
+        Assert.True(mensajeLlm.Contexto.BusquedaAmpliada);
+        Assert.True(mensajeLlm.Contexto.SinResultadosEnBarrio);
     }
 
     [Fact]
@@ -332,7 +781,7 @@ public class AsistenteServiceTests
 
         var recomendacion = Assert.Single(respuesta.Recomendaciones);
         Assert.Equal(cerca.Id, recomendacion.LugarId);
-        Assert.NotNull(respuesta.Advertencia);
+        Assert.Null(respuesta.Advertencia);
     }
 
     [Fact]
@@ -630,7 +1079,7 @@ public class AsistenteServiceTests
 
         Assert.Single(respuesta.Recomendaciones);
         Assert.Equal(vegano.Id, respuesta.Recomendaciones.Single().LugarId);
-        Assert.NotNull(respuesta.Advertencia);
+        Assert.Null(respuesta.Advertencia);
     }
 
     [Fact]
@@ -790,7 +1239,7 @@ public class AsistenteServiceTests
 
         Assert.Single(respuesta.Recomendaciones);
         Assert.Equal(cubierto.Id, respuesta.Recomendaciones.Single().LugarId);
-        Assert.NotNull(respuesta.Advertencia);
+        Assert.Null(respuesta.Advertencia);
     }
 
     [Fact]
@@ -1008,7 +1457,60 @@ public class AsistenteServiceTests
         Assert.Empty(lugares.Busquedas);
         Assert.Empty(respuesta.Recomendaciones);
         Assert.Null(respuesta.Accion);
-        Assert.Contains("No pude interpretar", respuesta.Mensaje);
+        Assert.Contains("¡Hola!", respuesta.Mensaje);
+    }
+
+    [Fact]
+    public async Task ResponderAsync_GraciasConHistorial_NoHeredaCategoria()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var lugares = new LugaresClientFalso
+        {
+            ResultadoSemantico = new[] { TestData.CrearLugar("Bar", "bares_vermu") }
+        };
+        var mensajeLlm = new MensajeLlmServiceFalso
+        {
+            Respuesta = "De nada. Si querés, puedo ayudarte a buscar otro lugar."
+        };
+        var service = CrearServicio(
+            viaje,
+            lugares,
+            new TelemetriaFalsa(),
+            new AsistenteOptions
+            {
+                TopK = 5,
+                MinResultados = 2,
+                RadioMetrosDefault = 800,
+                LlmGenerarMensaje = true
+            },
+            mensajeLlm: mensajeLlm);
+
+        var respuesta = await service.ResponderAsync(
+            viaje.Id,
+            new AsistenteRequestDto
+            {
+                Mensaje = "gracias",
+                NumeroDia = 1,
+                Historial = new[]
+                {
+                    new MensajeHistorialDto
+                    {
+                        Rol = "user",
+                        Contenido = "Quiero un bar en Puerto Madero"
+                    }
+                }
+            },
+            admin);
+
+        Assert.Empty(lugares.Busquedas);
+        Assert.True(mensajeLlm.FueLlamado);
+        Assert.NotNull(mensajeLlm.Contexto);
+        Assert.True(mensajeLlm.Contexto!.SinSenal);
+        Assert.Empty(mensajeLlm.Contexto.Filtros.CategoriaCodigos);
+        Assert.Equal(
+            "De nada. Si querés, puedo ayudarte a buscar otro lugar.",
+            respuesta.Mensaje);
     }
 
     [Fact]

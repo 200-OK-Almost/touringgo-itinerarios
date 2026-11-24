@@ -10,6 +10,7 @@ public class IntencionLlmContextoDto
     public BarrioCaba Barrio { get; set; }
     public NivelPresupuesto NivelPresupuesto { get; set; }
     public IReadOnlyCollection<string> CategoriasViaje { get; set; } = new List<string>();
+    public IReadOnlyCollection<MensajeHistorialDto> Historial { get; set; } = new List<MensajeHistorialDto>();
     public bool AptoNinos { get; set; }
     public bool AccesibleMovilidadReducida { get; set; }
     public IReadOnlyCollection<ParadaResolubleDto> Paradas { get; set; } = new List<ParadaResolubleDto>();
