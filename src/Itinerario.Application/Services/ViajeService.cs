@@ -197,11 +197,19 @@ public class ViajeService : IViajeService
         }
         var miembros = await _repository.ObtenerMiembrosDeViajeAsync(viajeId);
 
-        var usuarioInfo = await _usuariosClient.ObtenerResumenesAsync(
-            miembros.Select(m => m.UsuarioId),
-            cancellationToken);
+        var usuarioInfoPorId = new Dictionary<Guid, UsuarioResumenDto>();
+        try
+        {
+            var usuarioInfo = await _usuariosClient.ObtenerResumenesAsync(
+                miembros.Select(m => m.UsuarioId),
+                cancellationToken);
 
-        var usuarioInfoPorId = usuarioInfo.ToDictionary(p => p.Id);
+            usuarioInfoPorId = usuarioInfo.ToDictionary(p => p.Id);
+        }
+        catch (ServicioExternoNoDisponibleException)
+        {
+            // Si Usuarios no está disponible, devolvemos los miembros sin perfil.
+        }
 
         var resultado = miembros.Select(m =>
         {

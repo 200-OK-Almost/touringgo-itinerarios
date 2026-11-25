@@ -289,15 +289,27 @@ public class ItinerarioService : IItinerarioService
         IReadOnlyDictionary<Guid, string> nombres,
         CancellationToken cancellationToken)
     {
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(12));
+
         foreach (var parada in paradas)
         {
+            if (timeoutCts.IsCancellationRequested)
+            {
+                break;
+            }
+
             var nombre = nombres.TryGetValue(parada.LugarId, out var n) ? n : "este lugar";
             var prompt = $"Escribí una frase corta (máximo 25 palabras) sugiriendo qué hacer en \"{nombre}\" durante el turno {parada.Turno}. Respondé solo la frase, sin comillas ni markdown.";
 
             try
             {
-                var texto = await _ollamaClient.ChatTextoAsync(prompt, cancellationToken);
+                var texto = await _ollamaClient.ChatTextoAsync(prompt, timeoutCts.Token);
                 parada.SugerenciaIa = Truncar(texto, 255);
+            }
+            catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            {
+                break;
             }
             catch (ServicioExternoNoDisponibleException)
             {
