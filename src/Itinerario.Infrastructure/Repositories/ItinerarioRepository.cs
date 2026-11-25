@@ -84,6 +84,9 @@ public class ItinerarioRepository : IItinerarioRepository
     public void AgregarParada(ParadaItinerario parada)
         => _context.ParadasItinerario.Add(parada);
 
+    public void EliminarParada(ParadaItinerario parada)
+        => _context.ParadasItinerario.Remove(parada);
+
     public void MarcarModificado(ItinerarioEntity itinerario)
     {
         itinerario.FechaActualizacion = DateTimeOffset.UtcNow;

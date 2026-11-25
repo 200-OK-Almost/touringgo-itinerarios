@@ -68,6 +68,7 @@ public class ItinerarioServiceAplicarAccionTests
         Assert.Equal((short?)3, parada.MinutosAPieDesdeAnterior);
         Assert.Contains(itinerario, repo.Modificados);
         Assert.Equal(1, repo.Guardados);
+        Assert.Single(repo.ParadasAgregadas);
         Assert.Single(resultado);
     }
 
@@ -209,6 +210,33 @@ public class ItinerarioServiceAplicarAccionTests
                 viaje.Id,
                 CrearAccion("AgregarParada", string.Empty),
                 admin));
+    }
+
+    [Fact]
+    public async Task AplicarAccion_DiaCompleto_LanzaMensajeDeItinerarioCompleto()
+    {
+        var admin = Guid.NewGuid();
+        var viaje = TestData.CrearViaje(admin);
+        var itinerario = TestData.CrearItinerario(viaje, version: "v1");
+        TestData.CrearParada(itinerario, Guid.NewGuid(), Turno.Manana, 1);
+        TestData.CrearParada(itinerario, Guid.NewGuid(), Turno.Mediodia, 1);
+        TestData.CrearParada(itinerario, Guid.NewGuid(), Turno.Tarde, 1);
+        TestData.CrearParada(itinerario, Guid.NewGuid(), Turno.Noche, 1);
+
+        var lugar = TestData.CrearLugar();
+        var lugares = new LugaresClientFalso();
+        lugares.PorId[lugar.Id] = lugar;
+        var service = CrearService(viaje, lugares);
+
+        var excepcion = await Assert.ThrowsAsync<ReglaDeNegocioException>(() =>
+            service.AplicarAccionAsistenteAsync(
+                viaje.Id,
+                CrearAccion("AgregarParada", "v1", lugarId: lugar.Id),
+                admin));
+
+        Assert.Equal(
+            "Disculpa pero no puedo agregar una parada más al itinerario, ya está completo.",
+            excepcion.Message);
     }
 
     private static ItinerarioService CrearService(

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Itinerario.Application;
 using Itinerario.Application.DTOs;
 using Itinerario.Application.Interfaces;
@@ -89,6 +90,8 @@ internal sealed class ItinerarioRepositoryFalso : IItinerarioRepository
 
     public List<ParadaItinerario> ParadasAgregadas { get; } = new();
 
+    public List<ParadaItinerario> ParadasEliminadas { get; } = new();
+
     public List<ItinerarioEntity> Modificados { get; } = new();
 
     public Task<IReadOnlyCollection<ItinerarioEntity>> ObtenerPorViajeAsync(
@@ -123,6 +126,9 @@ internal sealed class ItinerarioRepositoryFalso : IItinerarioRepository
     public void AgregarParada(ParadaItinerario parada)
         => ParadasAgregadas.Add(parada);
 
+    public void EliminarParada(ParadaItinerario parada)
+        => ParadasEliminadas.Add(parada);
+
     public void MarcarModificado(ItinerarioEntity itinerario)
         => Modificados.Add(itinerario);
 }
@@ -131,8 +137,16 @@ internal sealed class LugaresClientFalso : ILugaresClient
 {
     public List<BusquedaSemanticaLugaresDto> Busquedas { get; } = new();
 
+    public List<BarrioCaba> BarriosCatalogo { get; } = new();
+
     public IReadOnlyCollection<LugarCandidatoDto> ResultadoSemantico { get; set; }
         = Array.Empty<LugarCandidatoDto>();
+
+    public IReadOnlyCollection<LugarCandidatoDto> ResultadoSemanticoSinBarrio { get; set; }
+        = Array.Empty<LugarCandidatoDto>();
+
+    public Dictionary<BarrioCaba, IReadOnlyCollection<LugarCandidatoDto>>
+        ResultadosSemanticosPorBarrio { get; } = new();
 
     public IReadOnlyCollection<LugarCandidatoDto> ResultadoCatalogo { get; set; }
         = Array.Empty<LugarCandidatoDto>();
@@ -145,7 +159,10 @@ internal sealed class LugaresClientFalso : ILugaresClient
         BarrioCaba barrio,
         IReadOnlyCollection<string> categoriaCodigos,
         CancellationToken cancellationToken = default)
-        => Task.FromResult(ResultadoCatalogo);
+    {
+        BarriosCatalogo.Add(barrio);
+        return Task.FromResult(ResultadoCatalogo);
+    }
 
     public Task<IReadOnlyCollection<LugarCandidatoDto>> BuscarSemanticoAsync(
         BusquedaSemanticaLugaresDto busqueda,
@@ -159,7 +176,16 @@ internal sealed class LugaresClientFalso : ILugaresClient
                 "Búsqueda semántica no disponible en tests.");
         }
 
-        return Task.FromResult(ResultadoSemantico);
+        if (busqueda.Barrio is { } barrio
+            && ResultadosSemanticosPorBarrio.TryGetValue(barrio, out var porBarrio))
+        {
+            return Task.FromResult(porBarrio);
+        }
+
+        return Task.FromResult(
+            busqueda.Barrio is null
+                ? ResultadoSemanticoSinBarrio
+                : ResultadoSemantico);
     }
 
     public Task<LugarCandidatoDto?> ObtenerPorIdAsync(
@@ -174,6 +200,9 @@ internal sealed class TelemetriaFalsa : IAsistenteTelemetry
     public List<string> Etapas { get; } = new();
 
     public List<string> Resultados { get; } = new();
+
+    public Activity? IniciarActividad(string nombre, Guid? viajeId = null)
+        => null;
 
     public void RegistrarEtapa(string etapa, TimeSpan duracion, Guid? viajeId = null)
         => Etapas.Add(etapa);
@@ -230,6 +259,44 @@ internal sealed class OllamaClientFalso : IOllamaClient
         string prompt,
         CancellationToken cancellationToken = default)
         => Task.FromResult("Sugerencia de prueba");
+}
+
+internal sealed class IntencionLlmServiceFalso : IIntencionLlmService
+{
+    public IntencionLlmCruda? Respuesta { get; set; }
+
+    public bool FueLlamado { get; private set; }
+
+    public IntencionLlmContextoDto? Contexto { get; private set; }
+
+    public Task<IntencionLlmCruda?> InterpretarAsync(
+        IntencionLlmContextoDto contexto,
+        CancellationToken cancellationToken = default)
+    {
+        FueLlamado = true;
+        Contexto = contexto;
+
+        return Task.FromResult(Respuesta);
+    }
+}
+
+internal sealed class MensajeLlmServiceFalso : IMensajeLlmService
+{
+    public string? Respuesta { get; set; }
+
+    public bool FueLlamado { get; private set; }
+
+    public MensajeLlmContextoDto? Contexto { get; private set; }
+
+    public Task<string?> GenerarAsync(
+        MensajeLlmContextoDto contexto,
+        CancellationToken cancellationToken = default)
+    {
+        FueLlamado = true;
+        Contexto = contexto;
+
+        return Task.FromResult(Respuesta);
+    }
 }
 
 internal sealed class InterpretacionServiceFalso : IInterpretacionService
@@ -328,7 +395,12 @@ internal static class TestData
         string categoria = "cafe_especialidad",
         short duracionMinutos = 60,
         decimal latitud = -34.58m,
-        decimal longitud = -58.42m)
+        decimal longitud = -58.42m,
+        IReadOnlyCollection<string>? opcionesDietarias = null,
+        bool esAireLibre = false,
+        bool esBajoTecho = true,
+        bool aptoNinos = true,
+        bool accesible = true)
         => new()
         {
             Id = Guid.NewGuid(),
@@ -339,10 +411,10 @@ internal static class TestData
             NivelPrecio = NivelPresupuesto.Equilibrado,
             DuracionSugeridaMinutos = duracionMinutos,
             Categorias = new[] { categoria },
-            EsAireLibre = false,
-            EsBajoTecho = true,
-            AptoNinos = true,
-            AccesibleMovilidadReducida = true,
-            OpcionesDietarias = Array.Empty<string>()
+            EsAireLibre = esAireLibre,
+            EsBajoTecho = esBajoTecho,
+            AptoNinos = aptoNinos,
+            AccesibleMovilidadReducida = accesible,
+            OpcionesDietarias = opcionesDietarias ?? Array.Empty<string>()
         };
 }

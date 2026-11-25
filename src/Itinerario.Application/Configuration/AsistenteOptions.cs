@@ -5,7 +5,9 @@ public class AsistenteOptions
     public const string SectionName = "Asistente";
 
     public bool Enabled { get; set; }
-    public int TopK { get; set; } = 12;
+    public bool LlmEnabled { get; set; }
+    public bool LlmGenerarMensaje { get; set; }
+    public int TopK { get; set; } = 5;
     public int MinResultados { get; set; } = 3;
     public double? SimilitudMinima { get; set; }
     public double RadioMetrosDefault { get; set; } = 800;
@@ -23,4 +25,5 @@ public class AsistenteRateLimitOptions
     public int PermitLimitPorViaje { get; set; } = 40;
     public int WindowSeconds { get; set; } = 60;
     public int QueueLimit { get; set; }
+    public string? RedisConnectionString { get; set; }
 }

@@ -11,7 +11,9 @@ public class AsistenteOptionsTests
 
         Assert.Equal("Asistente", AsistenteOptions.SectionName);
         Assert.False(options.Enabled);
-        Assert.Equal(12, options.TopK);
+        Assert.False(options.LlmEnabled);
+        Assert.False(options.LlmGenerarMensaje);
+        Assert.Equal(5, options.TopK);
         Assert.Equal(3, options.MinResultados);
         Assert.Null(options.SimilitudMinima);
         Assert.Equal(800d, options.RadioMetrosDefault);
@@ -24,5 +26,6 @@ public class AsistenteOptionsTests
         Assert.Equal(40, options.RateLimit.PermitLimitPorViaje);
         Assert.Equal(60, options.RateLimit.WindowSeconds);
         Assert.Equal(0, options.RateLimit.QueueLimit);
+        Assert.Null(options.RateLimit.RedisConnectionString);
     }
 }

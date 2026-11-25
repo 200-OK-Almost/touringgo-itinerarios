@@ -536,6 +536,10 @@ public class ItinerarioServiceTests
         public void AgregarParada(ParadaItinerario parada)
             => ParadasAgregadas.Add(parada);
 
+        public void EliminarParada(ParadaItinerario parada)
+        {
+        }
+
         public void MarcarModificado(ItinerarioEntity itinerario)
             => ItinerariosModificados.Add(itinerario);
     }

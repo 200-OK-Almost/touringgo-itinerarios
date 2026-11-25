@@ -4,7 +4,6 @@ using Itinerario.Application.DTOs;
 using Itinerario.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 
 namespace Itinerario.API.Controllers;
@@ -65,7 +64,7 @@ public class ViajesController : ControllerBase
         => Ok(await _service.ObtenerTodosAsync(_currentUser.UsuarioId, pagina, tamano, cancellationToken));
 
     [HttpGet("asistente/capacidades")]
-    [EnableRateLimiting(AsistenteRateLimitPolicies.Usuario)]
+    [AsistenteRateLimit(AsistenteRateLimitPolicies.Usuario)]
     [ProducesResponseType(typeof(AsistenteCapacidadesDto), StatusCodes.Status200OK)]
     public ActionResult<AsistenteCapacidadesDto> ObtenerCapacidadesAsistente()
         => Ok(AsistenteCapacidadesDto.Desde(_asistenteOptions.Value));
@@ -128,8 +127,30 @@ public class ViajesController : ControllerBase
         CancellationToken cancellationToken)
         => Ok(await _itinerarioService.ObtenerAsync(id, _currentUser.UsuarioId, cancellationToken));
 
+    [HttpDelete("{id:guid}/itinerario/paradas/{paradaId:guid}")]
+    [AsistenteRateLimit(AsistenteRateLimitPolicies.Viaje)]
+    [ProducesResponseType(typeof(IReadOnlyCollection<ItinerarioResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<IReadOnlyCollection<ItinerarioResponseDto>>> EliminarParada(
+        Guid id,
+        Guid paradaId,
+        [FromQuery] short numeroDia,
+        [FromQuery] string version,
+        CancellationToken cancellationToken)
+        => Ok(await _itinerarioService.EliminarParadaAsync(
+            id,
+            numeroDia,
+            paradaId,
+            version,
+            _currentUser.UsuarioId,
+            cancellationToken));
+
     [HttpPost("{id:guid}/asistente")]
-    [EnableRateLimiting(AsistenteRateLimitPolicies.Viaje)]
+    [AsistenteRateLimit(AsistenteRateLimitPolicies.Viaje)]
+    [RequestSizeLimit(32 * 1024)]
     [ProducesResponseType(typeof(AsistenteResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<AsistenteResponseDto>> Asistente(
@@ -152,7 +173,8 @@ public class ViajesController : ControllerBase
     }
 
     [HttpPost("{id:guid}/asistente/aplicar")]
-    [EnableRateLimiting(AsistenteRateLimitPolicies.Viaje)]
+    [AsistenteRateLimit(AsistenteRateLimitPolicies.Viaje)]
+    [RequestSizeLimit(32 * 1024)]
     [ProducesResponseType(typeof(IReadOnlyCollection<ItinerarioResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

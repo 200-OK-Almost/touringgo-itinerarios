@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using Itinerario.Application.Configuration;
 using Itinerario.Application.Interfaces;
 using Microsoft.Extensions.Logging;
@@ -18,8 +20,18 @@ public class AsistenteTelemetry : IAsistenteTelemetry
         _options = options.Value;
     }
 
+    public Activity? IniciarActividad(string nombre, Guid? viajeId = null)
+        => AsistenteMetrics.IniciarActividad(nombre, viajeId);
+
     public void RegistrarEtapa(string etapa, TimeSpan duracion, Guid? viajeId = null)
     {
+        var tags = new TagList
+        {
+            { "etapa", etapa }
+        };
+
+        AsistenteMetrics.DuracionEtapa.Record(duracion.TotalMilliseconds, tags);
+
         _logger.LogInformation(
             "Asistente etapa {Etapa} ViajeId {ViajeId} DuracionMs {DuracionMs}",
             etapa,
@@ -29,6 +41,14 @@ public class AsistenteTelemetry : IAsistenteTelemetry
 
     public void RegistrarResultado(string resultado, int cantidadRecomendaciones, Guid? viajeId = null)
     {
+        var tags = new TagList
+        {
+            { "resultado", resultado }
+        };
+
+        AsistenteMetrics.Resultados.Add(1, tags);
+        AsistenteMetrics.Recomendaciones.Record(cantidadRecomendaciones, tags);
+
         _logger.LogInformation(
             "Asistente resultado {Resultado} ViajeId {ViajeId} Recomendaciones {CantidadRecomendaciones}",
             resultado,
