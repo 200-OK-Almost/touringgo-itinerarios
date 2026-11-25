@@ -16,7 +16,7 @@ public class ViajeServiceTests
     public async Task CrearAsync_MapeaModalidadYCategoriasPorDia()
     {
         var repo = new ViajeRepositoryFalso();
-        var service = new ViajeService(repo, new LugaresClientFalso());
+        var service = new ViajeService(repo, new LugaresClientFalso(), new UsuariosClientFalso());
         var dto = CrearDto(
             CrearDia(1, Inicio, BarrioCaba.Palermo, TipoViaje.Solo,
                 "cafe_especialidad", "museos_galerias"),
@@ -44,7 +44,7 @@ public class ViajeServiceTests
     public async Task CrearAsync_SinPreferenciasPorDia_UsaLasGlobales()
     {
         var repo = new ViajeRepositoryFalso();
-        var service = new ViajeService(repo, new LugaresClientFalso());
+        var service = new ViajeService(repo, new LugaresClientFalso(), new UsuariosClientFalso());
         var dto = CrearDto(
             CrearDia(1, Inicio, BarrioCaba.Palermo, null));
         dto.TipoViaje = TipoViaje.Amigos;
@@ -61,7 +61,7 @@ public class ViajeServiceTests
     {
         var viaje = CrearViajeExistente();
         var repo = new ViajeRepositoryFalso { ViajeExistente = viaje };
-        var service = new ViajeService(repo, new LugaresClientFalso());
+        var service = new ViajeService(repo, new LugaresClientFalso(), new UsuariosClientFalso());
         var dto = new ViajeUpdateDto
         {
             Titulo = "Viaje actualizado",
@@ -238,6 +238,11 @@ public class ViajeServiceTests
 
         public Task<int> GuardarCambiosAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(0);
+
+        public Task<ICollection<MiembroViaje>> ObtenerMiembrosDeViajeAsync(Guid viajeId)
+        {
+            throw new NotImplementedException();
+        }
     }
 
     private sealed class LugaresClientFalso : ILugaresClient

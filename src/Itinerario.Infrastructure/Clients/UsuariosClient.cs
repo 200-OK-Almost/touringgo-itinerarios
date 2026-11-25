@@ -52,6 +52,58 @@ public class UsuariosClient : IUsuariosClient
         }
     }
 
+    public async Task<List<UsuarioResumenDto>> ObtenerResumenesAsync(
+        IEnumerable<Guid> usuariosIds,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = usuariosIds.Distinct().ToList();
+
+        if (ids.Count == 0)
+            return [];
+
+        var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            "/api/usuarios/batch")
+        {
+            Content = JsonContent.Create(new ObtenerUsuariosResumenRequest
+            {
+                UsuariosIds = ids
+            })
+        };
+
+        var token = ObtenerToken();
+
+        if (token is not null)
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        }
+
+        try
+        {
+            using var response = await _httpClient.SendAsync(
+                request,
+                cancellationToken);
+
+            response.EnsureSuccessStatusCode();
+
+            var usuarios = await response.Content
+                .ReadFromJsonAsync<List<UsuarioResumenDto>>(
+                    cancellationToken: cancellationToken);
+
+            return usuarios ?? [];
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new ServicioExternoNoDisponibleException(
+                "No se pudieron obtener los perfiles desde Usuarios.", ex);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new ServicioExternoNoDisponibleException(
+                "Usuarios no respondió a tiempo.");
+        }
+    }
+
     private string? ObtenerToken()
     {
         var contexto = _httpContextAccessor.HttpContext;

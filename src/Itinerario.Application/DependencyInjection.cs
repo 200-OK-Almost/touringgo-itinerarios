@@ -22,6 +22,7 @@ public static class DependencyInjection
         services.AddScoped<IIntencionLlmService, IntencionLlmService>();
         services.AddScoped<IMensajeLlmService, MensajeLlmService>();
         services.AddScoped<IAsistenteService, AsistenteService>();
+        services.AddScoped<IGastosService, GastosService>();
 
         return services;
     }
