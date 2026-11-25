@@ -41,14 +41,14 @@ public class GastosService : IGastosService
         await ValidarMiembrosAsync(
             viajeId,
             usuarioActualId,
-            request.PagadoPorMiembroId,
+            request.PagadoPorUsuarioId,
             request.ParticipantesIds,
             ct);
 
         gasto.Concepto = request.Concepto.Trim();
         gasto.Monto = request.Monto;
         gasto.Moneda = request.Moneda;
-        gasto.PagadoPorMiembroId = request.PagadoPorMiembroId;
+        gasto.PagadoPorMiembroId = request.PagadoPorUsuarioId;
         gasto.FechaGasto = request.FechaGasto;
 
         // Reemplazamos las divisiones anteriores.
@@ -396,7 +396,9 @@ public class GastosService : IGastosService
             PagadoPorMiembroId = gasto.PagadoPorMiembroId,
             RegistradoPorMiembroId = gasto.RegistradoPorMiembroId,
             FechaGasto = gasto.FechaGasto,
-            Divisiones = gasto.Divisiones.Select(d => MapearDivisionGastoDto(d))
+            Divisiones = gasto.Divisiones.Select(d => MapearDivisionGastoDto(d)),
+            LiquidacionId = gasto.LiquidacionId,
+            Liquidado = gasto.LiquidacionId.HasValue
         };
     }
     private static DivisionGastoDto MapearDivisionGastoDto(DivisionGasto d)

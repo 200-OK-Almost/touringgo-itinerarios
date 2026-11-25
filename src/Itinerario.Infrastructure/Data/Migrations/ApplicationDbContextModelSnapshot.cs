@@ -25,7 +25,6 @@ namespace Itinerario.Infrastructure.Data.Migrations
             modelBuilder.Entity("Itinerario.Domain.Entities.DivisionGasto", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("GastoId")

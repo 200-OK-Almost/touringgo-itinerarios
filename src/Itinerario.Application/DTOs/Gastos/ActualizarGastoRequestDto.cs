@@ -7,7 +7,7 @@ namespace Itinerario.Application.DTOs.Gastos
         public string Concepto { get; set; } = string.Empty;
         public decimal Monto {  get; set; }
         public TipoMoneda Moneda { get; set; }
-        public Guid PagadoPorMiembroId { get; set; }
+        public Guid PagadoPorUsuarioId { get; set; }
         public DateTime FechaGasto { get; set; }
         public IReadOnlyCollection<Guid> ParticipantesIds { get; set; } = new List<Guid>();
     }

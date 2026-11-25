@@ -16,6 +16,10 @@ public class DivisionGastoConfiguration
         });
 
         builder.HasKey(d => d.Id);
+        
+        // para solucionar error de ActualizarAsync
+        builder.Property(d => d.Id)
+            .ValueGeneratedNever();
 
         builder.Property(d => d.MontoAsignado)
             .HasPrecision(12, 2)
