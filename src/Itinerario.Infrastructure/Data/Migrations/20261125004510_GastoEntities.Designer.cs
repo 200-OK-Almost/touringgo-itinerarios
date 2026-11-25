@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Itinerario.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20261124141356_CorregirRelacionesGastos")]
-    partial class CorregirRelacionesGastos
+    [Migration("20261125004510_GastoEntities")]
+    partial class GastoEntities
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -28,7 +28,6 @@ namespace Itinerario.Infrastructure.Data.Migrations
             modelBuilder.Entity("Itinerario.Domain.Entities.DivisionGasto", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("GastoId")

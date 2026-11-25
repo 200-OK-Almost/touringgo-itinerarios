@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Itinerario.Infrastructure.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class GastosEntities : Migration
+    public partial class GastoEntities : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -17,14 +17,15 @@ namespace Itinerario.Infrastructure.Data.Migrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     ViajeId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Moneda = table.Column<int>(type: "char(3)", nullable: false),
+                    Moneda = table.Column<string>(type: "char(3)", nullable: false),
                     RealizadaPorUsuarioId = table.Column<Guid>(type: "uuid", nullable: false),
                     FechaLiquidacion = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()")
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_liquidaciones", x => x.Id);
-                    table.CheckConstraint("ck_liquidaciones_moneda", """length(trim("Moneda"::text)) = 3""");
+                    table.UniqueConstraint("AK_liquidaciones_Id_ViajeId", x => new { x.Id, x.ViajeId });
+                    table.CheckConstraint("ck_liquidaciones_moneda", "length(trim(\"Moneda\"::text)) = 3");
                     table.ForeignKey(
                         name: "FK_liquidaciones_viajes_ViajeId",
                         column: x => x.ViajeId,
@@ -44,7 +45,7 @@ namespace Itinerario.Infrastructure.Data.Migrations
                     LiquidacionId = table.Column<Guid>(type: "uuid", nullable: true),
                     Concepto = table.Column<string>(type: "character varying(120)", maxLength: 120, nullable: false),
                     Monto = table.Column<decimal>(type: "numeric(12,2)", precision: 12, scale: 2, nullable: false),
-                    Moneda = table.Column<int>(type: "char(3)", nullable: false, defaultValue: 0),
+                    Moneda = table.Column<string>(type: "char(3)", nullable: false),
                     FechaGasto = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     FechaCreacion = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     FechaActualizacion = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
@@ -53,12 +54,13 @@ namespace Itinerario.Infrastructure.Data.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_gastos", x => x.Id);
-                    table.CheckConstraint("ck_gastos_monto_total", """ "Monto" > 0""");
+                    table.UniqueConstraint("AK_gastos_Id_ViajeId", x => new { x.Id, x.ViajeId });
+                    table.CheckConstraint("ck_gastos_monto_total", " \"Monto\" > 0 ");
                     table.ForeignKey(
-                        name: "FK_gastos_liquidaciones_LiquidacionId",
-                        column: x => x.LiquidacionId,
+                        name: "FK_gastos_liquidaciones_LiquidacionId_ViajeId",
+                        columns: x => new { x.LiquidacionId, x.ViajeId },
                         principalTable: "liquidaciones",
-                        principalColumn: "Id",
+                        principalColumns: new[] { "Id", "ViajeId" },
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "FK_gastos_miembros_viaje_ViajeId_PagadoPorMiembroId",
@@ -83,27 +85,25 @@ namespace Itinerario.Infrastructure.Data.Migrations
                     LiquidacionId = table.Column<Guid>(type: "uuid", nullable: false),
                     DeParticipanteId = table.Column<Guid>(type: "uuid", nullable: false),
                     AParticipanteId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Monto = table.Column<decimal>(type: "numeric(12,2)", precision: 12, scale: 2, nullable: false),
-                    DeParticipanteViajeId = table.Column<Guid>(type: "uuid", nullable: false),
-                    DeParticipanteUsuarioId = table.Column<Guid>(type: "uuid", nullable: false)
+                    Monto = table.Column<decimal>(type: "numeric(12,2)", precision: 12, scale: 2, nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_transferencias_liquidacion", x => x.Id);
-                    table.CheckConstraint("ck_transferencias_monto", """ "Monto" > 0""");
-                    table.CheckConstraint("ck_transferencias_participantes", """ "DeParticipanteId" <> "AParticipanteId" """);
+                    table.CheckConstraint("ck_transferencias_monto", " \"Monto\" > 0");
+                    table.CheckConstraint("ck_transferencias_participantes", " \"DeParticipanteId\" <> \"AParticipanteId\" ");
                     table.ForeignKey(
-                        name: "FK_transferencias_liquidacion_liquidaciones_LiquidacionId",
-                        column: x => x.LiquidacionId,
+                        name: "FK_transferencias_liquidacion_liquidaciones_LiquidacionId_Viaj~",
+                        columns: x => new { x.LiquidacionId, x.ViajeId },
                         principalTable: "liquidaciones",
-                        principalColumn: "Id",
+                        principalColumns: new[] { "Id", "ViajeId" },
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "FK_transferencias_liquidacion_miembros_viaje_DeParticipanteVia~",
-                        columns: x => new { x.DeParticipanteViajeId, x.DeParticipanteUsuarioId },
+                        name: "FK_transferencias_liquidacion_miembros_viaje_ViajeId_AParticip~",
+                        columns: x => new { x.ViajeId, x.AParticipanteId },
                         principalTable: "miembros_viaje",
                         principalColumns: new[] { "viaje_id", "usuario_id" },
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "FK_transferencias_liquidacion_miembros_viaje_ViajeId_DePartici~",
                         columns: x => new { x.ViajeId, x.DeParticipanteId },
@@ -125,12 +125,12 @@ namespace Itinerario.Infrastructure.Data.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_division_gastos", x => x.Id);
-                    table.CheckConstraint("ck_division_gastos_monto_asignado", """ "MontoAsignado" > 0""");
+                    table.CheckConstraint("ck_division_gastos_monto_asignado", " \"MontoAsignado\" > 0");
                     table.ForeignKey(
-                        name: "FK_division_gastos_gastos_GastoId",
-                        column: x => x.GastoId,
+                        name: "FK_division_gastos_gastos_GastoId_ViajeId",
+                        columns: x => new { x.GastoId, x.ViajeId },
                         principalTable: "gastos",
-                        principalColumn: "Id",
+                        principalColumns: new[] { "Id", "ViajeId" },
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
                         name: "FK_division_gastos_miembros_viaje_ViajeId_ParticipanteId",
@@ -139,6 +139,11 @@ namespace Itinerario.Infrastructure.Data.Migrations
                         principalColumns: new[] { "viaje_id", "usuario_id" },
                         onDelete: ReferentialAction.Restrict);
                 });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_division_gastos_GastoId_ViajeId",
+                table: "division_gastos",
+                columns: new[] { "GastoId", "ViajeId" });
 
             migrationBuilder.CreateIndex(
                 name: "ix_division_gastos_participante",
@@ -157,9 +162,9 @@ namespace Itinerario.Infrastructure.Data.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_gastos_LiquidacionId",
+                name: "IX_gastos_LiquidacionId_ViajeId",
                 table: "gastos",
-                column: "LiquidacionId");
+                columns: new[] { "LiquidacionId", "ViajeId" });
 
             migrationBuilder.CreateIndex(
                 name: "ix_gastos_pagado_por",
@@ -212,9 +217,14 @@ namespace Itinerario.Infrastructure.Data.Migrations
                 column: "LiquidacionId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_transferencias_liquidacion_DeParticipanteViajeId_DeParticip~",
+                name: "IX_transferencias_liquidacion_LiquidacionId_ViajeId",
                 table: "transferencias_liquidacion",
-                columns: new[] { "DeParticipanteViajeId", "DeParticipanteUsuarioId" });
+                columns: new[] { "LiquidacionId", "ViajeId" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_transferencias_liquidacion_ViajeId_AParticipanteId",
+                table: "transferencias_liquidacion",
+                columns: new[] { "ViajeId", "AParticipanteId" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_transferencias_liquidacion_ViajeId_DeParticipanteId",
