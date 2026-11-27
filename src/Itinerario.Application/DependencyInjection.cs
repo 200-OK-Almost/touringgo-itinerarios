@@ -16,6 +16,7 @@ public static class DependencyInjection
         services.AddScoped<IItinerarioGenerator, ItinerarioGenerator>();
         services.AddScoped<IItinerarioRefiner, ItinerarioRefiner>();
         services.AddScoped<IViajeService, ViajeService>();
+        services.AddScoped<IViajeRecomendadoService, ViajeRecomendadoService>();
         services.AddScoped<IItinerarioService, ItinerarioService>();
         services.AddScoped<IInterpretacionService, InterpretacionService>();
         services.AddScoped<IIntencionService, IntencionService>();

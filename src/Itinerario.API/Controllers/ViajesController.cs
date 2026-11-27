@@ -14,6 +14,7 @@ namespace Itinerario.API.Controllers;
 public class ViajesController : ControllerBase
 {
     private readonly IViajeService _service;
+    private readonly IViajeRecomendadoService _viajeRecomendadoService;
     private readonly IItinerarioService _itinerarioService;
     private readonly IInterpretacionService _interpretacionService;
     private readonly IAsistenteService _asistenteService;
@@ -22,6 +23,7 @@ public class ViajesController : ControllerBase
 
     public ViajesController(
         IViajeService service,
+        IViajeRecomendadoService viajeRecomendadoService,
         IItinerarioService itinerarioService,
         IInterpretacionService interpretacionService,
         IAsistenteService asistenteService,
@@ -29,6 +31,7 @@ public class ViajesController : ControllerBase
         IOptions<AsistenteOptions> asistenteOptions)
     {
         _service = service;
+        _viajeRecomendadoService = viajeRecomendadoService;
         _itinerarioService = itinerarioService;
         _interpretacionService = interpretacionService;
         _asistenteService = asistenteService;
@@ -43,6 +46,22 @@ public class ViajesController : ControllerBase
         CancellationToken cancellationToken)
     {
         var viaje = await _service.CrearAsync(dto, _currentUser.UsuarioId, cancellationToken);
+
+        return CreatedAtAction(nameof(ObtenerPorId), new { id = viaje.Id }, viaje);
+    }
+
+    [HttpPost("recomendado")]
+    [ProducesResponseType(typeof(ViajeResponseDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ViajeResponseDto>> CrearRecomendado(
+        [FromBody] CrearViajeRecomendadoDto dto,
+        CancellationToken cancellationToken)
+    {
+        var viaje = await _viajeRecomendadoService.CrearAsync(
+            dto,
+            _currentUser.UsuarioId,
+            cancellationToken);
 
         return CreatedAtAction(nameof(ObtenerPorId), new { id = viaje.Id }, viaje);
     }
