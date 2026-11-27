@@ -106,7 +106,7 @@ public class ViajeServiceTests
         viaje.AgregarMiembro(miembroId, RolMiembro.Miembro);
 
         var repo = new ViajeRepositoryFalso { ViajeExistente = viaje };
-        var service = new ViajeService(repo, new LugaresClientFalso());
+        var service = new ViajeService(repo, new LugaresClientFalso(), new UsuariosClientFalso());
 
         var comoAdmin = await service.ObtenerPorIdAsync(
             viaje.Id,
