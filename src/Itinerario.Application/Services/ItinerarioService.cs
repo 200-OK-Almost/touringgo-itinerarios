@@ -151,6 +151,125 @@ public class ItinerarioService : IItinerarioService
         }
     }
 
+    public async Task<IReadOnlyCollection<ItinerarioResponseDto>> CrearManualAsync(
+        Guid viajeId,
+        IReadOnlyCollection<Guid> lugarIds,
+        Guid usuarioIdSolicitante,
+        CancellationToken cancellationToken = default)
+    {
+        if (lugarIds.Count is < 1 or > 6)
+        {
+            throw new ReglaDeNegocioException("El recorrido debe tener entre 1 y 6 paradas.");
+        }
+
+        if (lugarIds.Distinct().Count() != lugarIds.Count)
+        {
+            throw new ReglaDeNegocioException("No se permiten lugares repetidos en el recorrido.");
+        }
+
+        var viaje = await _viajeRepository.ObtenerPorIdAsync(viajeId, cancellationToken)
+            ?? throw new NotFoundException($"No se encontró el viaje con id {viajeId}.");
+
+        if (!viaje.EsAdministrador(usuarioIdSolicitante))
+        {
+            throw new AccesoDenegadoException("Solo un administrador del viaje puede crear el itinerario.");
+        }
+
+        var dias = ObtenerDias(viaje);
+        if (dias.Count != 1)
+        {
+            throw new ReglaDeNegocioException("La creación manual de itinerario solo está disponible para viajes de un día.");
+        }
+
+        var dia = dias[0];
+
+        var lugares = new List<LugarCandidatoDto>(lugarIds.Count);
+        foreach (var lugarId in lugarIds)
+        {
+            lugares.Add(await ObtenerLugarAsync(lugarId, cancellationToken));
+        }
+
+        var estadoAnterior = viaje.Estado;
+        viaje.CambiarEstado(EstadoViaje.EnPlanificacion);
+        _viajeRepository.Actualizar(viaje);
+        await _viajeRepository.GuardarCambiosAsync(cancellationToken);
+
+        try
+        {
+            var turnos = TurnosSegunAlcance(viaje.AlcanceTemporal);
+            var itinerario = new ItinerarioEntity
+            {
+                Id = Guid.NewGuid(),
+                ViajeId = viaje.Id,
+                NumeroDia = dia.NumeroDia,
+                Fecha = dia.Fecha,
+                OrigenTipo = dia.TipoPuntoPartida,
+                OrigenDescripcion = dia.NombrePuntoPartida ?? dia.DireccionPartida,
+                OrigenLatitud = dia.LatitudPartida,
+                OrigenLongitud = dia.LongitudPartida,
+                FechaCreacion = DateTimeOffset.UtcNow,
+                FechaActualizacion = DateTimeOffset.UtcNow,
+                Paradas = new List<ParadaItinerario>()
+            };
+
+            LugarCandidatoDto? anterior = null;
+            for (var indice = 0; indice < lugares.Count; indice++)
+            {
+                var lugar = lugares[indice];
+                var turno = turnos[Math.Min(indice, turnos.Count - 1)];
+                var referencia = ObtenerReferencia(anterior, itinerario, viaje);
+                var metricas = CalcularMetricas(lugar, referencia);
+
+                itinerario.Paradas.Add(new ParadaItinerario
+                {
+                    Id = Guid.NewGuid(),
+                    ItinerarioId = itinerario.Id,
+                    LugarId = lugar.Id,
+                    Turno = turno,
+                    OrdenParada = (short)(indice + 1),
+                    HoraInicio = CalcularHoraInicio(null, turno),
+                    DuracionMinutos = lugar.DuracionSugeridaMinutos,
+                    DistanciaMetrosDesdeAnterior = metricas.Distancia,
+                    CuadrasDesdeAnterior = metricas.Cuadras,
+                    MinutosAPieDesdeAnterior = metricas.Minutos,
+                    OrigenParada = OrigenParada.Manual,
+                    FechaCreacion = DateTimeOffset.UtcNow
+                });
+
+                anterior = lugar;
+            }
+
+            foreach (var turno in turnos)
+            {
+                RecalcularOrdenYHorasDelTurno(itinerario, turno);
+            }
+
+            viaje.CambiarEstado(EstadoViaje.Planificado);
+
+            await _itinerarioRepository.ReemplazarAsync(
+                viaje.Id,
+                new[] { itinerario },
+                cancellationToken);
+
+            return new[] { MapearRespuesta(itinerario) };
+        }
+        catch
+        {
+            try
+            {
+                viaje.CambiarEstado(estadoAnterior);
+                _viajeRepository.Actualizar(viaje);
+                await _viajeRepository.GuardarCambiosAsync(CancellationToken.None);
+            }
+            catch
+            {
+                // Ignorar error al revertir para no tapar la excepción original
+            }
+
+            throw;
+        }
+    }
+
     private async Task CompletarCoordenadasHospedajeSiAplicaAsync(Viaje viaje, CancellationToken cancellationToken)
     {
         if (EsTipoHospedaje(viaje.TipoPuntoPartida)
